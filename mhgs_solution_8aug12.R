@@ -406,16 +406,32 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 	#skips is the number of skips
 	#burnin is the length of the burn in period
 ##########################################
-getimpdat <- function(dats, mdls, guessvec, N = 3000, 
+getimpdat <- function(datscomplete, mdls, N = 3000, 
 	skips = 5, burnin = 1000) {
 		
 	#get logged data	
-	logdat <- log(dats)
+	logdat <- log(datscomplete)
 	logmdl <- log(mdls)
 	
 	
 	#create binary matrix of which BDL
 	nbdlmat <- 1 * (logdat >= logmdl)
+	for ( i in 1 : ncol(logdat)) {
+		#find which BDL
+		whBDL <- which(nbdlmat[, i] == 0)
+		
+		#replace BDL with 1/2MDL
+		if (length(whBDL) > 0) {
+			logdat[whBDL, i] <- 1/2 * logmdl[whBDL, i]
+		}
+	}
+	
+	
+	#set initial guesses
+	guessvec <- vector(mode = "list" , length = 3)
+	guessvec[[1]] <- logdat
+	guessvec[[2]] <- colMeans(logdat)
+	guessvec[[3]] <- cov(logdat)
 	
 	#get indices of which BDL and which above DL for each day
 	wh_miss <- vector(mode = "list", length = nrow(logdat))
@@ -430,18 +446,19 @@ getimpdat <- function(dats, mdls, guessvec, N = 3000,
 	#get skips
 	# seqs <- seq(1, N-burnin, by = skips)
 	
-	logdatMed <- logdat
-	logdatMean <- logdat
-	logdatDraw1 <- logdat
-	logdatDraw2 <- logdat
+	datMed <- logdat
+	datMean <- logdat
+	datDraw <- array( dim = c(nrow(logdat), ncol(logdat), 10))
 	#for each day
 	for (k in 1 : nrow(logdat)) {
 		
 		#if at least one missing
 		if( length(wh_miss[[k]]) > 0 ) {
 	
-	
+			#if more than 1 missing
 			if ( length(wh_miss[[k]]) > 1 ) {
+				
+				
 				#get all data for that day, missing cons
 				dat <- mhtest[[1]][k, wh_miss[[k]], ]
 				#eliminate burnin
@@ -449,21 +466,31 @@ getimpdat <- function(dats, mdls, guessvec, N = 3000,
 				#undo correlated samples
 				#dat <- dat[, seqs]
 				
-				ls <- sample(seq(1, ncol(dat)), 2, replace = T)
-				logdatMed[k, wh_miss[[k]]] <- apply(dat, 1, median, na.rm = T)
-				logdatMean[k, wh_miss[[k]]] <- apply(dat, 1, mean, na.rm = T)
-				logdatDraw1[k, wh_miss[[k]]] <- dat[, ls[1]]
-				logdatDraw2[k, wh_miss[[k]]] <- dat[, ls[2]]
+
+				datMed[k, wh_miss[[k]]] <- exp(apply(dat, 1, median, na.rm = T))
+				datMean[k, wh_miss[[k]]] <- exp(apply(dat, 1, mean, na.rm = T))
+				
+				#get random draws for multiple imputation
+				ls <- sample(seq(1, length(dat)), 10, replace = T)
+				for( l in 1 : 10) {
+					datDraw[k, wh_miss[[k]], l] <- exp(dat[, ls[l]])
+					}
+					
+			#if only 1 missing that day		
 			} else {
 				dat <- mhtest[[1]][k, wh_miss[[k]], ]
 				dat <- dat[ burnin : (N + 1)]
 				
 				
-				ls <- sample(seq(1, length(dat)), 2, replace = T)
-				logdatMed[k, wh_miss[[k]]] <- median(dat, na.rm = T)
-				logdatMean[k, wh_miss[[k]]] <- mean(dat, na.rm = T)
-				logdatDraw1[k, wh_miss[[k]]] <- dat[ls[1]]
-				logdatDraw2[k, wh_miss[[k]]] <- dat[ls[2]]
+				#get median and mean of chain
+				datMed[k, wh_miss[[k]]] <- exp(median(dat, na.rm = T))
+				datMean[k, wh_miss[[k]]] <- exp(mean(dat, na.rm = T))
+				
+				#get random draws for multiple imputation
+				ls <- sample(seq(1, length(dat)), 10, replace = T)
+				for( l in 1 : 10) {
+					datDraw[k, wh_miss[[k]], l] <- exp(dat[ls[l]])
+					}
 			}
 			
 
@@ -473,9 +500,8 @@ getimpdat <- function(dats, mdls, guessvec, N = 3000,
 	}
 	
 	#exponeniate data for output
-	out <- list(exp(logdatMed), exp(logdatMean), 
-		exp(logdatDraw1), exp(logdatDraw2))
-	names(out) <- c("median", "mean", "draw1", "draw2")
+	out <- list(datMed, datMean, datDraw)
+	names(out) <- c("median", "mean", "draws")
 	
 	out
 }
