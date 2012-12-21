@@ -41,7 +41,7 @@ impmisssingle <- function(datk, gthet, gsig, wh) {
 	mnmiss <- gthet[wh]
 	yobs <- datk[-wh]
 	
-	mn <- mnmiss + cov01 %*% solve(cov11, yobs - mnobs)
+	mn <- mnmiss + cov01 %*% solve(cov11, t(yobs - mnobs))
 	ss <- backsolve(chol(cov11), cov01, transpose = T)
 	ss <- crossprod(ss)
 	var <- cov00 - ss
@@ -216,7 +216,7 @@ sigfun <- function(dat, guessvec, prv="no prior", prS="no prior") {
 	
 	#S2 calculation
 	swp <- sweep(gdat, 2, gthet)
-	arswp <- crossprod(swp)
+	arswp <- crossprod(as.matrix(swp))
 	Psi <- diag(ncol(gdat))
 	S2 <- Psi + arswp
 	
@@ -317,15 +317,15 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 	
 	
 	#set first guesses
-	gymiss[, , 1] <- guessvec[[1]]
-	gthet[, 1] <- guessvec[[2]]
-	gsig[, , 1] <- guessvec[[3]]
+	gymiss[, , 1] <- as.matrix(guessvec[[1]])
+	gthet[, 1] <- as.vector(guessvec[[2]])
+	gsig[, , 1] <- as.matrix(guessvec[[3]])
 	
 	
 	drops <- 0
 	#for each iteration (N large)
 	for(i in 1:N){
-		# print(i)
+		print(i)
 		j <- 1
 		while(j<4){
 			#update f/lam
@@ -347,9 +347,9 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 	
 	
 			#update guesses, new last
-			gymiss[, , i + 1] <- guessvec[[1]]
-			gthet[, i + 1] <- guessvec[[2]]
-			gsig[, , i + 1] <- guessvec[[3]]
+			gymiss[, , i + 1] <- as.matrix(guessvec[[1]])
+			gthet[, i + 1] <- as.vector(guessvec[[2]])
+			gsig[, , i + 1] <- as.matrix(guessvec[[3]])
 			
 			j <- j + 1
 
@@ -445,7 +445,7 @@ getimpdat <- function(datscomplete, mdls, N = 3000,
 	
 	#get skips
 	# seqs <- seq(1, N-burnin, by = skips)
-	
+	browser()
 	datMed <- logdat
 	datMean <- logdat
 	datDraw <- array( dim = c(nrow(logdat), ncol(logdat), 10))
@@ -471,7 +471,7 @@ getimpdat <- function(datscomplete, mdls, N = 3000,
 				datMean[k, wh_miss[[k]]] <- exp(apply(dat, 1, mean, na.rm = T))
 				
 				#get random draws for multiple imputation
-				ls <- sample(seq(1, length(dat)), 10, replace = T)
+				ls <- sample(seq(1, ncol(dat)), 10, replace = F)
 				for( l in 1 : 10) {
 					datDraw[k, wh_miss[[k]], l] <- exp(dat[, ls[l]])
 					}
@@ -487,7 +487,7 @@ getimpdat <- function(datscomplete, mdls, N = 3000,
 				datMean[k, wh_miss[[k]]] <- exp(mean(dat, na.rm = T))
 				
 				#get random draws for multiple imputation
-				ls <- sample(seq(1, length(dat)), 10, replace = T)
+				ls <- sample(seq(1, length(dat)), 10, replace = F)
 				for( l in 1 : 10) {
 					datDraw[k, wh_miss[[k]], l] <- exp(dat[ls[l]])
 					}
