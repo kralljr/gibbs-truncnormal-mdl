@@ -10,6 +10,7 @@
 #include "gibbs.h"
 #include "matrix.h"
 #include "multivariate.h"
+#include "truncnormal.h"
 #include "wishart.h"
 
 struct guess {
@@ -130,20 +131,6 @@ ran_multivariate_normal(const gsl_rng *rng, const gsl_vector *mean,
     ran_multivariate_normal_chol(rng, mean, sigma, z);
 }
 
-double
-ran_truncnorm(const gsl_rng *r, double a, double b, double m, double s)
-{
-    double y;
-    double am = (a - m) / s;
-    double bm = (b - m) / s;
-
-    do {
-        y = gsl_ran_ugaussian(r);
-    } while (y < am || y > bm);
-
-    return s*(y + m);
-}
-
 void
 ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
         const struct bdl *bdls, size_t nbdls, const gsl_rng *rng)
@@ -158,7 +145,8 @@ ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
         gsl_vector_const_view row = gsl_matrix_const_row(gdat, bdls[i].row);
 
         impmisssingle(&row.vector, gthet, gsig, bdls[i].col, &mean, &var);
-        newmiss = ran_truncnorm(rng, GSL_NEGINF, bdls[i].lim, mean, sqrt(var));
+        newmiss = ran_truncnormal(rng, GSL_NEGINF, bdls[i].lim, mean,
+                sqrt(var));
 
         gsl_matrix_set(gdat, bdls[i].row, bdls[i].col, newmiss);
     }
