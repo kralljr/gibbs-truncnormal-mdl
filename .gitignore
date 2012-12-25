@@ -1,0 +1,5 @@
+*.o
+*.swp
+*.csv
+.gdbinit
+gibbs
