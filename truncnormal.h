@@ -17,6 +17,7 @@ __BEGIN_DECLS
 
 double ran_truncnormal(const gsl_rng *r, double a, double b, double m,
         double s);
+double ran_utruncnormal(const gsl_rng *r, double a, double b);
 
 __END_DECLS
 
