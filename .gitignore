@@ -2,4 +2,5 @@
 *.swp
 *.csv
 .gdbinit
+gmon.out
 gibbs
