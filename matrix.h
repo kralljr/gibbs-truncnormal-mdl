@@ -19,9 +19,13 @@
 __BEGIN_DECLS
 
 void vector_remove_elem(const gsl_vector *u, size_t i, gsl_vector *v);
-void matrix_row_remove_elem(const gsl_matrix *A, size_t i, size_t j, gsl_vector *v);
-void matrix_remove_rowcol(const gsl_matrix *A, size_t r1, size_t r2, gsl_matrix *B);
+void matrix_row_remove_elem(const gsl_matrix *A, size_t i, size_t j,
+        gsl_vector *v);
+void matrix_remove_rowcol(const gsl_matrix *A, size_t r1, size_t r2,
+        gsl_matrix *B);
 void matrix_update_const_diag(gsl_matrix *A, double alpha, double beta);
+void matrix_invert_remove_rowcol(const gsl_matrix *Ainv, size_t i,
+        gsl_matrix *Binv, gsl_vector *work);
 
 __END_DECLS
 

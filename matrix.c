@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include <gsl/gsl_blas.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 
@@ -87,4 +88,19 @@ matrix_update_const_diag(gsl_matrix *A, double alpha, double beta)
             gsl_matrix_set(A, i, i, alpha * y + beta);
         }
     }
+}
+
+/**
+ * Compute the inverse of A with a row and column removed, given the inverse
+ * of A.  If A is n-by-n, then B is (n-1)-by-(n-1), and work is (n-1).
+ *
+ * Computes inv(A[-i, -i]) given inv(A) for symmetric A.
+ */
+void
+matrix_invert_remove_rowcol(const gsl_matrix *Ainv, size_t i, gsl_matrix *Binv,
+        gsl_vector *work)
+{
+    matrix_remove_rowcol(Ainv, i, i, Binv);
+    matrix_row_remove_elem(Ainv, i, i, work);
+    gsl_blas_dger(-1.0 / gsl_matrix_get(Ainv, i, i), work, work, Binv);
 }

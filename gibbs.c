@@ -13,12 +13,6 @@
 #include "truncnormal.h"
 #include "wishart.h"
 
-struct guess {
-    gsl_matrix *data;
-    gsl_vector *mean;
-    gsl_matrix *cvar;
-};
-
 /**
  * A single below detection limit observation.
  */
@@ -27,84 +21,6 @@ struct bdl {
     size_t row;     /* Row (zero-indexed) - day */
     size_t col;     /* Column (zero-indexed) - day */
 };
-
-struct problem {
-    const gsl_matrix *data;
-    const gsl_matrix *mdls;
-    const gsl_rng *rng;
-};
-
-/**
- * @chol: Cholesky decomposition of gsig[-wh, -wh]
- */
-static double
-impmissmn(const gsl_vector *datk, const gsl_vector *gthet, size_t wh,
-          const gsl_matrix *chol, const gsl_vector *cov01)
-{
-    /* XXX: pass, don't allocate */
-    gsl_vector *yobs_m_mnobs;
-    gsl_vector *soln;
-    double mnmiss;
-    size_t i;
-    size_t j;
-
-    yobs_m_mnobs = gsl_vector_alloc(datk->size - 1);
-    soln = gsl_vector_alloc(datk->size - 1);
-
-    j = 0;
-    for (i = 0; i < wh; i++, j++) {
-        gsl_vector_set(yobs_m_mnobs, j,
-                gsl_vector_get(datk, i) - gsl_vector_get(gthet, i));
-    }
-
-    for (i = wh + 1; i < datk->size; i++, j++) {
-        gsl_vector_set(yobs_m_mnobs, j,
-                gsl_vector_get(datk, i) - gsl_vector_get(gthet, i));
-    }
-
-    gsl_linalg_cholesky_solve(chol, yobs_m_mnobs, soln);
-
-    gsl_blas_ddot(soln, cov01, &mnmiss);
-
-    gsl_vector_free(yobs_m_mnobs);
-    gsl_vector_free(soln);
-
-    return mnmiss + gsl_vector_get(gthet, wh);
-}
-
-static double
-impmissvar(const gsl_matrix *gsig, size_t wh, const gsl_matrix *chol,
-        gsl_vector *cov01)
-{
-    double ss;
-
-    gsl_blas_dtrsv(CblasLower, CblasNoTrans, CblasNonUnit, chol, cov01);
-    gsl_blas_ddot(cov01, cov01, &ss);
-
-    return gsl_matrix_get(gsig, wh, wh) - ss;
-}
-
-static void
-impmisssingle(const gsl_vector *datk, const gsl_vector *gthet,
-        const gsl_matrix *gsig, size_t wh, double *mean, double *var)
-{
-    /* XXX: pass, don't allocate */
-    gsl_vector *cov01;
-    gsl_matrix *cov11;
-
-    cov01 = gsl_vector_alloc(gsig->size1 - 1);
-    cov11 = gsl_matrix_alloc(gsig->size1 - 1, gsig->size2 - 1);
-
-    matrix_row_remove_elem(gsig, wh, wh, cov01);
-    matrix_remove_rowcol(gsig, wh, wh, cov11);
-    gsl_linalg_cholesky_decomp(cov11);
-
-    *mean = impmissmn(datk, gthet, wh, cov11, cov01);
-    *var = impmissvar(gsig, wh, cov11, cov01);
-
-    gsl_vector_free(cov01);
-    gsl_matrix_free(cov11);
-}
 
 void
 ran_multivariate_normal_chol(const gsl_rng *rng, const gsl_vector *mean,
@@ -131,25 +47,74 @@ ran_multivariate_normal(const gsl_rng *rng, const gsl_vector *mean,
     ran_multivariate_normal_chol(rng, mean, sigma, z);
 }
 
+static void
+impmisssingle(const gsl_matrix *gdat, const gsl_vector *gthet,
+        const gsl_matrix *gsig, const gsl_matrix *gsiginv,
+        size_t row, size_t col, double *mean, double *var)
+{
+    gsl_matrix *cov11;
+    gsl_vector *cov01;
+    gsl_vector *prod;
+    double ss;
+    double mnmiss;
+    size_t i;
+
+    cov11 = gsl_matrix_alloc(gsig->size1 - 1, gsig->size2 - 1);
+    cov01 = gsl_vector_alloc(gsig->size1 - 1);
+    prod = gsl_vector_alloc(gsig->size1 - 1);
+
+    /* prod <- cov01' * inv(cov11) */
+    matrix_invert_remove_rowcol(gsiginv, col, cov11, cov01);
+    matrix_row_remove_elem(gsig, col, col, cov01);
+    gsl_blas_dgemv(CblasTrans, 1.0, cov11, cov01, 0.0, prod);
+
+    /* ss <- cov01' * inv(cov11) * cov01 */
+    gsl_blas_ddot(prod, cov01, &ss);
+    *var = gsl_matrix_get(gsig, col, col) - ss;
+
+    /* mnmiss <- cov01' * inv(cov11) * (y[-i] - gthet[-i]) */
+    mnmiss = 0.0;
+    for (i = 0; i < col; i++) {
+        mnmiss += (gsl_matrix_get(gdat, row, i) - gsl_vector_get(gthet, i)) *
+                gsl_vector_get(prod, i);
+    }
+
+    for (i = col + 1; i < gdat->size2; i++) {
+        mnmiss += (gsl_matrix_get(gdat, row, i) - gsl_vector_get(gthet, i)) *
+                gsl_vector_get(prod, i - 1);
+    }
+    *mean = gsl_vector_get(gthet, col) + mnmiss;
+
+    gsl_matrix_free(cov11); 
+    gsl_vector_free(cov01);
+    gsl_vector_free(prod);
+}
+
 void
 ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
-        const struct bdl *bdls, size_t nbdls, const gsl_rng *rng)
+        const struct bdl *bdls, size_t nbdls, const gsl_matrix *gsiginv,
+        const gsl_rng *rng)
 {
     size_t i;
+    gsl_matrix *data_copy;
+
+    data_copy = gsl_matrix_alloc(gdat->size1, gdat->size2);
+
+    gsl_matrix_memcpy(data_copy, gdat);
 
     for (i = 0; i < nbdls; i++) {
         double mean;
         double var;
         double newmiss;
 
-        gsl_vector_const_view row = gsl_matrix_const_row(gdat, bdls[i].row);
-
-        impmisssingle(&row.vector, gthet, gsig, bdls[i].col, &mean, &var);
+        impmisssingle(data_copy, gthet, gsig, gsiginv, bdls[i].row, bdls[i].col,
+                &mean, &var);
         newmiss = ran_truncnormal(rng, GSL_NEGINF, bdls[i].lim, mean,
                 sqrt(var));
-
         gsl_matrix_set(gdat, bdls[i].row, bdls[i].col, newmiss);
     }
+
+    gsl_matrix_free(data_copy);
 }
 
 /**
@@ -178,19 +143,15 @@ matrix_column_sweep(gsl_matrix *A, const gsl_vector *v)
  */
 void
 thetfun(const gsl_matrix *gdat, gsl_vector *gthet, const gsl_matrix *gsig,
-        const gsl_rng *rng)
+        const gsl_matrix *gsiginv, const gsl_rng *rng)
 {
     gsl_matrix *chol;
     gsl_vector *means;
 
-    /* XXX: pass, don't allocate */
     chol = gsl_matrix_alloc(gsig->size1, gsig->size2);
     means = gsl_vector_alloc(gthet->size);
 
-    gsl_matrix_memcpy(chol, gsig);
-    gsl_linalg_cholesky_decomp(chol);
-    gsl_linalg_cholesky_invert(chol);
-
+    gsl_matrix_memcpy(chol, gsiginv);
     gsl_matrix_scale(chol, gsig->size1);
     multivariate_mean(gdat, means);
     gsl_blas_dgemv(CblasNoTrans, 1.0, chol, means, 0.0, gthet);
@@ -201,7 +162,7 @@ thetfun(const gsl_matrix *gdat, gsl_vector *gthet, const gsl_matrix *gsig,
 
     gsl_blas_dgemv(CblasNoTrans, 1.0, chol, gthet, 0.0, means);
 
-    ran_multivariate_normal_chol(rng, means, chol, gthet);
+    ran_multivariate_normal(rng, means, chol, gthet);
 
     gsl_matrix_free(chol);
     gsl_vector_free(means);
@@ -209,14 +170,13 @@ thetfun(const gsl_matrix *gdat, gsl_vector *gthet, const gsl_matrix *gsig,
 
 void
 sigfun(const gsl_matrix *gdat, const gsl_vector *gthet, gsl_matrix *gsig,
-    const gsl_rng *rng)
+        const gsl_rng *rng)
 {
     gsl_matrix *swp;
     gsl_matrix *scale;
     gsl_permutation *permutation;
     double nu;
 
-    /* XXX: pass, don't allocate */
     swp = gsl_matrix_alloc(gdat->size1, gdat->size2);
     scale = gsl_matrix_alloc(gdat->size2, gdat->size2);
     permutation = gsl_permutation_alloc(gdat->size2);
@@ -243,9 +203,19 @@ void
 gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
         const struct bdl *bdls, size_t nbdls, const gsl_rng *rng)
 {
-    ymissfun(gdat, gthet, gsig, bdls, nbdls, rng);
-    thetfun(gdat, gthet, gsig, rng);
+    gsl_matrix *gsiginv;
+
+    gsiginv = gsl_matrix_alloc(gsig->size1, gsig->size2);
+
+    gsl_matrix_memcpy(gsiginv, gsig);
+    gsl_linalg_cholesky_decomp(gsiginv);
+    gsl_linalg_cholesky_invert(gsiginv);
+
+    ymissfun(gdat, gthet, gsig, bdls, nbdls, gsiginv, rng);
+    thetfun(gdat, gthet, gsig, gsiginv, rng);
     sigfun(gdat, gthet, gsig, rng);
+
+    gsl_matrix_free(gsiginv);
 }
 
 void
@@ -255,9 +225,8 @@ mhwithings(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
     size_t i;
 
     /* FIXME: pass the constants as arguments */
-    for (i = 0; i < 100; i++) {
+    for (i = 0; i < 500; i++) {
         gibbsfun(gdat, gthet, gsig, bdls, nbdls, rng);
-        fprintf(stderr, "%d\n", i);
     }
 }
 
