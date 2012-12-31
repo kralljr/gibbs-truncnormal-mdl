@@ -21,7 +21,6 @@ library(MCMCpack)
 
 
 
-	
 ##########################################
 #get new guess for missing data: trunc normal
 #arguments 
@@ -30,21 +29,26 @@ library(MCMCpack)
 	#gsig: guess matrix for covar (N_cons X N_cons)
 	#wh: which column is missing (1:N_cons)
 ##########################################
-impmisssingle <- function(datk, gthet, gsig, wh) {
+impmisssingle <- function(datk, gthet, gsig, gsig.misscol, wh,
+	mnzero) {
 	#for each day
 
-	cov11 <- gsig[-wh, -wh]
+#	cov11 <- gsig[-wh, -wh]
 	cov00 <- gsig[wh, wh]
 	cov01 <- gsig[wh, -wh]
 	
 	mnobs <- gthet[-wh]
 	mnmiss <- gthet[wh]
 	yobs <- datk[-wh]
+
 	
-	mn <- mnmiss + cov01 %*% solve(cov11, t(yobs - mnobs))
-	ss <- backsolve(chol(cov11), cov01, transpose = T)
-	ss <- crossprod(ss)
-	var <- cov00 - ss
+	#mn <- mnmiss + cov01 %*% solve(cov11, t(yobs - mnobs))
+	mn <- mnmiss + cov01 %*% gsig.misscol[, , wh] %*% 
+		mnzero[-wh]
+	#ss <- backsolve(chol(cov11), cov01, transpose = T)
+	#ss <- crossprod(ss)
+	#var <- cov00 - ss
+	var <- cov00 - cov01 %*% gsig.misscol[, , wh] %*% cov01
 
 	list(mn,var)
 }
@@ -79,7 +83,7 @@ impmisssingle <- function(datk, gthet, gsig, wh) {
 		#guessvec[[3]] covariance
 ##########################################
 ymissfun <- function(dat, mdls, nbdls, guessvec,
-	wh_miss) {
+	wh_miss, minmdls) {
 	
 	#set old estimates
 	gsig <- guessvec[[3]]		
@@ -90,20 +94,44 @@ ymissfun <- function(dat, mdls, nbdls, guessvec,
 	#set up for univariate
 	m <- 1
 	# for each day with BDL
+	
+	#get inverse of gsig
+	gsiginv <- chol2inv(chol(gsig))
+	
+	#which columns have missing
+	wcolmiss <- which(colSums(nbdls) < nrow(nbdls))
+	gsig.misscol <- array(dim = c(nrow(gsig) - 1, 
+		ncol(gsig) - 1, ncol(gsig)))
+		
+	#for each column with missingness	
+	for( i in 1 : length(wcolmiss)) {
+		num <- wcolmiss[i]
+		sigcut <- gsiginv[-num, -num] - gsiginv[num, -num] %*% 
+			t(gsiginv[-num, num]) / gsiginv[num, num]
+		#update array	
+		gsig.misscol[, , num] <- sigcut
+	}
+	
+	
+	
 	for (k in 1 : nrow(dat)) {
+		
+		mnzero <- t(gdat[k, ] - gthet)
 
 		if(length(wh_miss[[k]]) > 0) {
 		
 			#for each missing value on day i
 			for (j in 1 : length(wh_miss[[k]])) {
-				
+		
 				#find conditional mean/var
-				mnv <- impmisssingle(gdat[k, ], gthet, 
-					gsig, wh_miss[[k]][j])
+				mnv <- impmisssingle(datk = gdat[k, ], 
+					gthet = gthet, 
+					gsig = gsig, gsig.misscol = gsig.misscol, 
+					wh = wh_miss[[k]][j], mnzero = mnzero)
 	
 				#propose truncated normal (0 to mdl)	 
 					#log scale with cond mean and var		
-				newymiss1 <- rtnorm(1, 
+				newymiss1 <- rtnorm(1, lower = minmdls - 10, 
 					upper = mdls[k, wh_miss[[k]][j]],
 					mean = mnv[[1]], sd = sqrt(mnv[[2]]))
 				if( is.na(newymiss1)) {browser()}	
@@ -119,7 +147,7 @@ ymissfun <- function(dat, mdls, nbdls, guessvec,
 		
 	}#end loop over row (k)
 	
-	guessvec
+	list(guessvec, gsiginv)
 }
 
 
@@ -148,17 +176,22 @@ thetfun<-function(dat, guessvec,
 	prmean = rep(0, ncol(dat)), 
 	prsig = rep(10^5,ncol(dat))){
 		
+	#get inverse of sigma
+	ssig <- guessvec[[2]]
+	
 	#set old estimates
+	guessvec <- guessvec[[1]]
 	gsig <- guessvec[[3]]
 	gthet <- guessvec[[2]]
 	gdat <- guessvec[[1]]
+
 
 	#Prior: assume independence
 	sprsigmat <- diag(1/prsig)
 
 	#Invert current guess
-	ssig <- chol(gsig)
-	ssig <- chol2inv(ssig)
+	# ssig <- chol(gsig)
+	# ssig <- chol2inv(ssig)
 	
 	#Get variance: mu | X, sigma ~ MVN(mns, vars)
 	vars <- chol(sprsigmat + nrow(gdat) * ssig)
@@ -265,15 +298,16 @@ sigfun <- function(dat, guessvec, prv="no prior", prS="no prior") {
 	#wh_miss list of length N_days with 
 		#column numbers of missing
 ##########################################
-
 gibbsfun <- function(dat, nbdlmat, guessvec,
-	wh, mdls, wh_miss) {
+	wh, mdls, wh_miss, minmdls) {
 	#we have initial guesses 
-	
 	if (wh == 1) {
 		#update missing
-		guessvec <- ymissfun(dat, mdls, nbdlmat, guessvec,
-			wh_miss)
+		guessvec <- ymissfun(dat = dat, mdls = mdls, 
+			nbdls = nbdlmat, guessvec = guessvec,
+			wh_miss = wh_miss, minmdls = minmdls)
+		# guessvec <- guessvec1[[1]]
+		# gsiginv <- guessvec1[[2]]
 	} else if (wh == 2) {
 		#update mean
 		guessvec <- thetfun(dat, guessvec)
@@ -308,7 +342,7 @@ gibbsfun <- function(dat, nbdlmat, guessvec,
 ##########################################
 mhwithings <- function(dat, mdls, nbdlsmat, 
 	wh_miss, guessvec, N){
-	
+
 
 	#create arrays for output
 	gymiss <- array(dim = c(nrow(dat), ncol(dat), N + 1))
@@ -321,6 +355,7 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 	gthet[, 1] <- as.vector(guessvec[[2]])
 	gsig[, , 1] <- as.matrix(guessvec[[3]])
 	
+	minmdls <- min(mdls)
 	
 	drops <- 0
 	#for each iteration (N large)
@@ -329,9 +364,9 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 		j <- 1
 		while(j<4){
 			#update f/lam
-
-			gibbs<-gibbsfun(dat, nbdlmat, guessvec, j, 
-				mdls, wh_miss)
+			gibbs<-gibbsfun(dat = dat, nbdlmat = nbdlsmat, 
+				guessvec = guessvec, wh = j, 
+				mdls = mdls, wh_miss = wh_miss, minmdls = minmdls)
 		
 			# if(j==3){
 				
@@ -342,7 +377,12 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 					# guessvec <- gibbs[[1]]
 				# }
 			# }else{
-				guessvec <- gibbs
+				if(j == 1) {
+					guessvec <- gibbs[[1]]
+				}else {
+					
+					guessvec <- gibbs
+				}
 				# }
 	
 	
@@ -351,6 +391,11 @@ mhwithings <- function(dat, mdls, nbdlsmat,
 			gthet[, i + 1] <- as.vector(guessvec[[2]])
 			gsig[, , i + 1] <- as.matrix(guessvec[[3]])
 			
+			
+			
+			if(j == 1) {
+				guessvec <- gibbs
+				}
 			j <- j + 1
 
 		}
@@ -440,12 +485,13 @@ getimpdat <- function(datscomplete, mdls, N = 3000,
 	}
 
 	#do MCMC
-	mhtest <- mhwithings(logdat, logmdl, nbdlmat, wh_miss, 
-		guessvec, N)
+	mhtest <- mhwithings(dat = logdat, mdls = logmdl, 
+		nbdlsmat = nbdlmat, wh_miss = wh_miss, 
+		guessvec = guessvec, N = N)
 	
 	#get skips
 	# seqs <- seq(1, N-burnin, by = skips)
-	browser()
+
 	datMed <- logdat
 	datMean <- logdat
 	datDraw <- array( dim = c(nrow(logdat), ncol(logdat), 10))
@@ -505,4 +551,6 @@ getimpdat <- function(datscomplete, mdls, N = 3000,
 	
 	out
 }
+
+
 
