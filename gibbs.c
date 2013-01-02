@@ -93,7 +93,7 @@ impmisssingle(const gsl_matrix *gdat, const gsl_vector *gthet,
 void
 ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
         const struct bdl *bdls, size_t nbdls, const gsl_matrix *gsiginv,
-        const gsl_rng *rng)
+        double minmdl, const gsl_rng *rng)
 {
     size_t i;
     gsl_matrix *data_copy;
@@ -109,7 +109,7 @@ ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
 
         impmisssingle(data_copy, gthet, gsig, gsiginv, bdls[i].row, bdls[i].col,
                 &mean, &var);
-        newmiss = ran_truncnormal(rng, GSL_NEGINF, bdls[i].lim, mean,
+        newmiss = ran_truncnormal(rng, minmdl - 10.0, bdls[i].lim, mean,
                 sqrt(var));
         gsl_matrix_set(gdat, bdls[i].row, bdls[i].col, newmiss);
     }
@@ -131,16 +131,6 @@ matrix_column_sweep(gsl_matrix *A, const gsl_vector *v)
     }
 }
 
-/**
- * New guess for mean: normal.
- *
- * @gdat: missing data (ndays x ncons)
- * @gthet: mean (ncons)
- * @gsig: covariance (ncons x ncons)
- * @rng: random number generator
- *
- * On output, gthet contains the new guess for mean.
- */
 void
 thetfun(const gsl_matrix *gdat, gsl_vector *gthet, const gsl_matrix *gsig,
         const gsl_matrix *gsiginv, const gsl_rng *rng)
@@ -201,7 +191,7 @@ sigfun(const gsl_matrix *gdat, const gsl_vector *gthet, gsl_matrix *gsig,
 
 void
 gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
-        const struct bdl *bdls, size_t nbdls, const gsl_rng *rng)
+        const struct bdl *bdls, size_t nbdls, double minmdl, const gsl_rng *rng)
 {
     gsl_matrix *gsiginv;
 
@@ -211,7 +201,7 @@ gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
     gsl_linalg_cholesky_decomp(gsiginv);
     gsl_linalg_cholesky_invert(gsiginv);
 
-    ymissfun(gdat, gthet, gsig, bdls, nbdls, gsiginv, rng);
+    ymissfun(gdat, gthet, gsig, bdls, nbdls, gsiginv, minmdl, rng);
     thetfun(gdat, gthet, gsig, gsiginv, rng);
     sigfun(gdat, gthet, gsig, rng);
 
@@ -220,14 +210,34 @@ gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
 
 void
 mhwithings(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
-        struct bdl *bdls, size_t nbdls, gsl_rng *rng)
+        struct bdl *bdls, size_t nbdls, double minmdl, gsl_rng *rng)
 {
     size_t i;
 
     /* FIXME: pass the constants as arguments */
     for (i = 0; i < 500; i++) {
-        gibbsfun(gdat, gthet, gsig, bdls, nbdls, rng);
+        gibbsfun(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
+        fprintf(stderr, "%ld\n", i);
     }
+}
+
+static size_t
+count_bdls(const gsl_matrix *data, const gsl_matrix *mdls)
+{
+    size_t nbdls;
+    size_t i;
+    size_t j;
+
+    nbdls = 0;
+    for (i = 0; i < data->size1; i++) {
+        for (j = 0; j < data->size2; j++) {
+            if (gsl_matrix_get(data, i, j) < gsl_matrix_get(mdls, i, j)) {
+                nbdls++;
+            }
+        }
+    }
+   
+    return nbdls; 
 }
 
 void
@@ -243,6 +253,7 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls)
     size_t i;
     size_t j;
     size_t k;
+    double minmdl;
 
     rng = gsl_rng_alloc(gsl_rng_taus);
     gdat = gsl_matrix_alloc(data->size1, data->size2);
@@ -250,15 +261,7 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls)
     gsig = gsl_matrix_alloc(gdat->size2, gdat->size2);
     tmp = gsl_vector_alloc(data->size2);
 
-    nbdls = 0;
-    for (i = 0; i < data->size1; i++) {
-        for (j = 0; j < data->size2; j++) {
-            if (gsl_matrix_get(data, i, j) < gsl_matrix_get(mdls, i, j)) {
-                nbdls++;
-            }
-        }
-    }
-
+    nbdls = count_bdls(data, mdls);
     bdls = calloc(nbdls, sizeof (struct bdl));
     k = 0;
     for (i = 0; i < data->size1; i++) {
@@ -282,8 +285,9 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls)
 
     multivariate_mean(gdat, gthet);
     multivariate_covariance(gdat, gthet, gsig, tmp);
+    minmdl = log(gsl_matrix_min(mdls));
 
-    mhwithings(gdat, gthet, gsig, bdls, nbdls, rng);
+    mhwithings(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
 
     gsl_matrix_free(gdat);
     gsl_vector_free(gthet);
