@@ -26,7 +26,7 @@ ran_truncnormal(const gsl_rng *r, double a, double b, double m, double s)
 
     y = ran_utruncnormal(r, am, bm);
 
-    return s * (y + m);
+    return s * y + m;
 }
 
 /**
