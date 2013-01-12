@@ -1,14 +1,20 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -O0 -g -pg
-LDFLAGS=-lm -lgslcblas -lgsl -g -pg
+CFLAGS=-Wall -Wextra -O2 -DHAVE_INLINE
+LDFLAGS=-lm -lgslcblas -lgsl
 
-all: gibbs rtnorm
+all: gibbs rmvnorm rtnorm
 
-gibbs: gibbs.o main.o matrix.o multivariate.o mvnormal.o truncnormal.o wishart.o
+gibbs: csv.o gibbs.o main.o matrix.o multivariate.o mvnormal.o truncnormal.o wishart.o
 	$(CC) $(LDFLAGS) $^ -o $@
+
+rmvnorm: rmvnorm.c csv.o mvnormal.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
 rtnorm: rtnorm.c truncnormal.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+
+csv.o: csv.c csv.h
+	$(CC) $(CFLAGS) -c $<
 
 gibbs.o: gibbs.c gibbs.h
 	$(CC) $(CFLAGS) -c $<
