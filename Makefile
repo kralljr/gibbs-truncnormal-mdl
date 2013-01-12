@@ -4,7 +4,7 @@ LDFLAGS=-lm -lgslcblas -lgsl -g -pg
 
 all: gibbs rtnorm
 
-gibbs: gibbs.o main.o matrix.o multivariate.o truncnormal.o wishart.o
+gibbs: gibbs.o main.o matrix.o multivariate.o mvnormal.o truncnormal.o wishart.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
 rtnorm: rtnorm.c truncnormal.o
@@ -20,6 +20,9 @@ matrix.o: matrix.c matrix.h
 	$(CC) $(CFLAGS) -c $<
 
 multivariate.o: multivariate.c multivariate.h
+	$(CC) $(CFLAGS) -c $<
+
+mvnormal.o: mvnormal.c mvnormal.h
 	$(CC) $(CFLAGS) -c $<
 
 truncnormal.o: truncnormal.c truncnormal.h

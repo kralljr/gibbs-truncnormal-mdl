@@ -10,6 +10,7 @@
 #include "gibbs.h"
 #include "matrix.h"
 #include "multivariate.h"
+#include "mvnormal.h"
 #include "truncnormal.h"
 #include "wishart.h"
 
@@ -21,31 +22,6 @@ struct bdl {
     size_t row;     /* Row (zero-indexed) - day */
     size_t col;     /* Column (zero-indexed) - day */
 };
-
-void
-ran_multivariate_normal_chol(const gsl_rng *rng, const gsl_vector *mean,
-        const gsl_matrix *sigmachol, gsl_vector *z)
-{
-    size_t i;
-
-    for (i = 0; i < z->size; i++) {
-        double r;
-
-        r = gsl_ran_gaussian(rng, 1.0);
-        gsl_vector_set(z, i, r);
-    }
-
-    gsl_blas_dtrmv(CblasLower, CblasNoTrans, CblasNonUnit, sigmachol, z);
-    gsl_vector_add(z, mean);
-}
-
-void
-ran_multivariate_normal(const gsl_rng *rng, const gsl_vector *mean,
-        gsl_matrix *sigma, gsl_vector *z)
-{
-    gsl_linalg_cholesky_decomp(sigma);
-    ran_multivariate_normal_chol(rng, mean, sigma, z);
-}
 
 static void
 impmisssingle(const gsl_matrix *gdat, const gsl_vector *gthet,
