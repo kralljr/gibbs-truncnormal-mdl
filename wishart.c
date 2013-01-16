@@ -24,7 +24,7 @@ ran_wishart(const gsl_rng *r, double nu, gsl_matrix *chol, gsl_matrix *tmp)
     for (i = 1; i <= tmp->size1; i++) {
         double y;
 
-        y = gsl_ran_gamma(r, nu - i + 1, 0.5);
+        y = sqrt(gsl_ran_gamma(r, (nu - i + 1) / 2.0, 2.0));
         gsl_matrix_set(tmp, i - 1, i - 1, y);
     }
 
