@@ -140,12 +140,10 @@ sigfun(const gsl_matrix *gdat, const gsl_vector *gthet, gsl_matrix *gsig,
 {
     gsl_matrix *swp;
     gsl_matrix *scale;
-    gsl_permutation *permutation;
     double nu;
 
     swp = gsl_matrix_alloc(gdat->size1, gdat->size2);
     scale = gsl_matrix_alloc(gdat->size2, gdat->size2);
-    permutation = gsl_permutation_alloc(gdat->size2);
 
     /* swp <- sweep(gdat, 2, gthet) */
     gsl_matrix_memcpy(swp, gdat);
@@ -158,11 +156,10 @@ sigfun(const gsl_matrix *gdat, const gsl_vector *gthet, gsl_matrix *gsig,
 
     /* gsig <- riwish(nu, scale) */    
     nu = gdat->size1 + gdat->size2 + 1;
-    ran_invwishart(rng, nu, scale, permutation, gsig);
+    ran_invwishart(rng, nu, scale, gsig);
 
     gsl_matrix_free(swp);
     gsl_matrix_free(scale);
-    gsl_permutation_free(permutation);
 }
 
 void

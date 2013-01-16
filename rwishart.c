@@ -5,7 +5,6 @@
 #include <unistd.h>
 
 #include <gsl/gsl_matrix.h>
-#include <gsl/gsl_permutation.h>
 #include <gsl/gsl_rng.h>
 
 #include "csv.h"
@@ -55,7 +54,6 @@ main(int argc, char *argv[])
     double *scale_array;
     gsl_matrix_view scale;
     gsl_matrix *tmp_scale;
-    gsl_permutation *permutation;
     gsl_matrix *z;
     size_t size;
     const char *filename = NULL;
@@ -114,7 +112,6 @@ main(int argc, char *argv[])
     scale = gsl_matrix_view_array(scale_array, size, size);
 
     tmp_scale = gsl_matrix_alloc(size, size);
-    permutation = gsl_permutation_alloc(size);
     z = gsl_matrix_alloc(size, size);
 
     if (filename == NULL) {
@@ -134,7 +131,7 @@ main(int argc, char *argv[])
     for (i = 0; i < n; i++) {
         gsl_matrix_memcpy(tmp_scale, &scale.matrix);
         if (inverse) {
-            ran_invwishart(rng, d, tmp_scale, permutation, z);
+            ran_invwishart(rng, d, tmp_scale, z);
         } else {
             ran_wishart(rng, d, tmp_scale, z);
         }
@@ -147,7 +144,6 @@ main(int argc, char *argv[])
 
     free(scale_array);
     gsl_matrix_free(tmp_scale);
-    gsl_permutation_free(permutation);
     gsl_matrix_free(z);
     gsl_rng_free(rng);
 
