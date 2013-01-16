@@ -4,3 +4,6 @@
 .gdbinit
 gmon.out
 gibbs
+rmvnorm
+rtnorm
+rwishart

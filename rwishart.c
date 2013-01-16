@@ -21,6 +21,7 @@ print_usage(const char *progname)
             "  -s float,float,...   scale\n"
             "  -o filename          output file (default standard output)\n"
             "  -r int               random seed (default 0)\n"
+            "  -i                   draw from inverse Wishart\n"
             "  -h                   show this help\n"
             , progname);
 }
@@ -60,12 +61,13 @@ main(int argc, char *argv[])
     const char *filename = NULL;
     FILE *file;
     long seed = 0;
+    int inverse = 0;
     int i;
     gsl_rng *rng;
 
     opterr = 0;
 
-    while ((c = getopt(argc, argv, "n:d:s:o:r:h")) != -1) {
+    while ((c = getopt(argc, argv, "n:d:s:o:r:ih")) != -1) {
         char *endptr = NULL;
 
         switch (c) {
@@ -83,6 +85,9 @@ main(int argc, char *argv[])
                 break;
             case 'r':
                 seed = strtol(optarg, &endptr, 0);
+                break;
+            case 'i':
+                inverse = 1;
                 break;
             case 'h':
                 print_usage(argv[0]);
@@ -128,7 +133,11 @@ main(int argc, char *argv[])
 
     for (i = 0; i < n; i++) {
         gsl_matrix_memcpy(tmp_scale, &scale.matrix);
-        ran_invwishart(rng, d, tmp_scale, permutation, z);
+        if (inverse) {
+            ran_invwishart(rng, d, tmp_scale, permutation, z);
+        } else {
+            ran_wishart(rng, d, tmp_scale, z);
+        }
         print_matrix(file, z);
     }
 
