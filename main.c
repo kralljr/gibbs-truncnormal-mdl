@@ -3,13 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <gsl/gsl_matrix.h>
 
 #include "csv.h"
 #include "gibbs.h"
 
-/* FIXME: use glibc's getline if available */
+/* XXX: use glibc's getline if available */
 static ssize_t
 fgets_checked(char *s, size_t n, FILE *f)
 {
@@ -100,8 +101,6 @@ csv_load_file(const char *filename)
 
     f = fopen(filename, "rt");
     if (f == NULL) {
-        perror(filename);
- 
         return NULL;
     }
 
@@ -111,38 +110,126 @@ csv_load_file(const char *filename)
     return M;
 }
 
-int
-main(int argc, const char *argv[])
+static void
+print_usage(const char *progname)
 {
-    gsl_matrix *data;
-    gsl_matrix *mdls;
+    fprintf(stderr,
+            "Usage: %s [OPTION] DATA MDLS OUTDIR\n"
+            "  -n int   number of iterations (default 1000)\n"
+            "  -s int   number of iterations to skip (default 0)\n"
+            "  -d int   number of random draws (default 1)\n"
+            "  -r int   random seed (default 0)\n"
+            "  -h       show this help\n"
+            , progname);
+}
 
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s DATA MDLS\n", argv[0]);
-        
-        return EINVAL;
+/* TODO: argument parsing is rudimentary.  Need to validate numerical
+ * arguments. */
+int
+main(int argc, char * const argv[])
+{
+    const char *data_filename;
+    const char *mdls_filename;
+    const char *output_directory;
+    size_t iterations = 1000;
+    size_t skip = 0;
+    size_t draws = 1;
+    long seed = 0;
+
+    gsl_matrix *data = NULL;
+    gsl_matrix *mdls = NULL;
+
+    int optflag;
+    int exit_val = 0;
+
+    opterr = 0;
+
+    while ((optflag = getopt(argc, argv, "n:s:d:r:h")) != -1) {
+        char *endptr = NULL;
+
+        switch (optflag) {
+            case 'n':
+                iterations = strtol(optarg, &endptr, 10);
+                break;
+            case 's':
+                skip = strtol(optarg, &endptr, 10);
+                break;
+            case 'd':
+                draws = strtol(optarg, &endptr, 10);
+                break;
+            case 'r':
+                seed = strtol(optarg, &endptr, 0);
+                break;
+            case 'h':
+                print_usage(argv[0]);
+                return 0;
+            case '?':
+                fprintf(stderr, "%s: invalid option or missing argument: -'%c'\n",
+                        argv[0], optopt);
+                print_usage(argv[0]);
+                return 1;
+        }
     }
 
-    data = csv_load_file(argv[1]);
-    if (data == NULL) {
-        return errno;
+    if (optind == argc) {
+        fprintf(stderr, "%s: missing argument DATA\n", argv[0]);
+        print_usage(argv[0]);
+        return 1;
+    }
+    data_filename = argv[optind++];
+
+    if (optind == argc) {
+        fprintf(stderr, "%s: missing argument MDLS\n", argv[0]);
+        print_usage(argv[0]);
+        return 1;
+    }
+    mdls_filename = argv[optind++];
+
+    if (optind == argc) {
+        fprintf(stderr, "%s: missing argument OUTDIR\n", argv[0]);
+        print_usage(argv[0]);
+        return 1;
+    }
+    output_directory = argv[optind++];
+
+    if (optind < argc) {
+        fprintf(stderr, "%s: unexpected argument: %s\n", argv[0], argv[optind]);
+        print_usage(argv[0]);
+        return 1;
     }
 
-    mdls = csv_load_file(argv[2]);
+    data = csv_load_file(data_filename);
     if (data == NULL) {
-        return errno;
+        fprintf(stderr, "%s: cannot read '%s': %s\n",
+                argv[0], data_filename, strerror(errno));
+        exit_val = errno;
+        goto exit;
+    }
+
+    mdls = csv_load_file(mdls_filename);
+    if (mdls == NULL) {
+        fprintf(stderr, "%s: cannot read '%s': %s\n",
+                argv[0], mdls_filename, strerror(errno));
+        exit_val = errno;
+        goto exit;
     }
 
     if (data->size1 != mdls->size1 || data->size2 != mdls->size2) {
         fprintf(stderr, "Non-matching `data' and `mdls' dimensions\n");
-
-        return GSL_EBADLEN;
+        exit_val = GSL_EBADLEN;
+        goto exit;
     }
 
-    impute_data(data, mdls);
+    impute_data(data, mdls, output_directory, iterations, skip, draws, seed);
 
-    gsl_matrix_free(data);
-    gsl_matrix_free(mdls);
+exit:
+    if (data != NULL) {
+        gsl_matrix_free(data);
+    }
 
-    return 0;
+    if (mdls != NULL) {
+        gsl_matrix_free(mdls);
+    }
+
+    return exit_val;
 }

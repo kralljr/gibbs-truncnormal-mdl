@@ -186,14 +186,17 @@ gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
 
 void
 mhwithings(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
-        struct bdl *bdls, size_t nbdls, double minmdl, gsl_rng *rng)
+        struct bdl *bdls, size_t nbdls, double minmdl, size_t iterations,
+        size_t skip, gsl_rng *rng)
 {
     size_t i;
 
-    /* FIXME: pass the constants as arguments */
-    for (i = 0; i < 500; i++) {
+    for (i = 0; i < iterations; i++) {
         gibbsfun(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
         fprintf(stderr, "%ld\n", i);
+
+        if (i > skip) {
+        }
     }
 }
 
@@ -217,7 +220,9 @@ count_bdls(const gsl_matrix *data, const gsl_matrix *mdls)
 }
 
 void
-impute_data(const gsl_matrix *data, const gsl_matrix *mdls)
+impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
+        const char *output_directory, size_t iterations, size_t skip,
+        size_t draws, long seed)
 {
     gsl_rng *rng;
     gsl_matrix *gdat;
@@ -232,6 +237,8 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls)
     double minmdl;
 
     rng = gsl_rng_alloc(gsl_rng_taus);
+    gsl_rng_set(rng, seed);
+
     gdat = gsl_matrix_alloc(data->size1, data->size2);
     gthet = gsl_vector_alloc(data->size2);
     gsig = gsl_matrix_alloc(gdat->size2, gdat->size2);
@@ -263,7 +270,7 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls)
     multivariate_covariance(gdat, gthet, gsig, tmp);
     minmdl = log(gsl_matrix_min(mdls));
 
-    mhwithings(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
+    mhwithings(gdat, gthet, gsig, bdls, nbdls, minmdl, iterations, skip, rng);
 
     gsl_matrix_free(gdat);
     gsl_vector_free(gthet);
