@@ -23,21 +23,16 @@ struct bdl {
     size_t col;     /* Column (zero-indexed) - day */
 };
 
-static void
-impmisssingle(const gsl_matrix *gdat, const gsl_vector *gthet,
-        const gsl_matrix *gsig, const gsl_matrix *gsiginv,
-        size_t row, size_t col, double *mean, double *var)
+static double
+impmissvar(const gsl_matrix *gsig, const gsl_matrix *gsiginv, size_t col,
+        gsl_vector *prod)
 {
     gsl_matrix *cov11;
     gsl_vector *cov01;
-    gsl_vector *prod;
     double ss;
-    double mnmiss;
-    size_t i;
 
     cov11 = gsl_matrix_alloc(gsig->size1 - 1, gsig->size2 - 1);
     cov01 = gsl_vector_alloc(gsig->size1 - 1);
-    prod = gsl_vector_alloc(gsig->size1 - 1);
 
     /* prod <- cov01' * inv(cov11) */
     matrix_invert_remove_rowcol(gsiginv, col, cov11, cov01);
@@ -46,7 +41,19 @@ impmisssingle(const gsl_matrix *gdat, const gsl_vector *gthet,
 
     /* ss <- cov01' * inv(cov11) * cov01 */
     gsl_blas_ddot(prod, cov01, &ss);
-    *var = gsl_matrix_get(gsig, col, col) - ss;
+
+    gsl_matrix_free(cov11); 
+    gsl_vector_free(cov01);
+    
+    return gsl_matrix_get(gsig, col, col) - ss;
+}
+
+static double
+impmissmean(const gsl_matrix *gdat, const gsl_vector *gthet,
+        size_t row, size_t col, const gsl_vector *prod)
+{
+    double mnmiss;
+    size_t i;
 
     /* mnmiss <- cov01' * inv(cov11) * (y[-i] - gthet[-i]) */
     mnmiss = 0.0;
@@ -59,11 +66,8 @@ impmisssingle(const gsl_matrix *gdat, const gsl_vector *gthet,
         mnmiss += (gsl_matrix_get(gdat, row, i) - gsl_vector_get(gthet, i)) *
                 gsl_vector_get(prod, i - 1);
     }
-    *mean = gsl_vector_get(gthet, col) + mnmiss;
-
-    gsl_matrix_free(cov11); 
-    gsl_vector_free(cov01);
-    gsl_vector_free(prod);
+    
+    return gsl_vector_get(gthet, col) + mnmiss;
 }
 
 void
@@ -73,24 +77,42 @@ ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
 {
     size_t i;
     gsl_matrix *data_copy;
+    double *vars;
+    gsl_vector **prods;
+    size_t ncons;
 
     data_copy = gsl_matrix_alloc(gdat->size1, gdat->size2);
 
     gsl_matrix_memcpy(data_copy, gdat);
+
+    ncons = gsig->size2;
+    vars = calloc(ncons, sizeof (double));
+    prods = calloc(ncons, sizeof (gsl_vector *));
+    for (i = 0; i < ncons; i++) {
+        prods[i] = gsl_vector_alloc(gsig->size1 - 1);
+        vars[i] = impmissvar(gsig, gsiginv, i, prods[i]);
+    }
 
     for (i = 0; i < nbdls; i++) {
         double mean;
         double var;
         double newmiss;
 
-        impmisssingle(data_copy, gthet, gsig, gsiginv, bdls[i].row, bdls[i].col,
-                &mean, &var);
+        mean = impmissmean(data_copy, gthet, bdls[i].row, bdls[i].col,
+                prods[bdls[i].col]);
+        var = vars[bdls[i].col];
         newmiss = ran_truncnormal(rng, minmdl - 10.0, bdls[i].lim, mean,
                 sqrt(var));
         gsl_matrix_set(gdat, bdls[i].row, bdls[i].col, newmiss);
     }
 
     gsl_matrix_free(data_copy);
+    free(vars);
+
+    for (i = 0; i < ncons; i++) {
+        gsl_vector_free(prods[i]);
+    }
+    free(prods);
 }
 
 /**
