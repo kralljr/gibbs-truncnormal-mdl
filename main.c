@@ -116,9 +116,10 @@ print_usage(const char *progname)
     fprintf(stderr,
             "Usage: %s [OPTION] DATA MDLS OUTDIR\n"
             "  -n int   number of iterations (default 1000)\n"
-            "  -s int   number of iterations to skip (default 0)\n"
+            "  -b int   number of iterations to burn-in (default 0)\n"
             "  -d int   number of random draws (default 1)\n"
             "  -r int   random seed (default 0)\n"
+            "  -p int   print progress every n iterations (default 1000)\n"
             "  -h       show this help\n"
             , progname);
 }
@@ -132,8 +133,9 @@ main(int argc, char * const argv[])
     const char *mdls_filename;
     const char *output_directory;
     size_t iterations = 1000;
-    size_t skip = 0;
+    size_t burn = 0;
     size_t draws = 1;
+    size_t progress = 1000;
     long seed = 0;
 
     gsl_matrix *data = NULL;
@@ -144,21 +146,24 @@ main(int argc, char * const argv[])
 
     opterr = 0;
 
-    while ((optflag = getopt(argc, argv, "n:s:d:r:h")) != -1) {
+    while ((optflag = getopt(argc, argv, "n:b:d:r:p:h")) != -1) {
         char *endptr = NULL;
 
         switch (optflag) {
             case 'n':
                 iterations = strtol(optarg, &endptr, 10);
                 break;
-            case 's':
-                skip = strtol(optarg, &endptr, 10);
+            case 'b':
+                burn = strtol(optarg, &endptr, 10);
                 break;
             case 'd':
                 draws = strtol(optarg, &endptr, 10);
                 break;
             case 'r':
                 seed = strtol(optarg, &endptr, 0);
+                break;
+            case 'p':
+                progress = strtol(optarg, &endptr, 0);
                 break;
             case 'h':
                 print_usage(argv[0]);
@@ -220,7 +225,8 @@ main(int argc, char * const argv[])
         goto exit;
     }
 
-    impute_data(data, mdls, output_directory, iterations, skip, draws, seed);
+    impute_data(data, mdls, output_directory, iterations, burn, draws, progress,
+            seed);
 
 exit:
     if (data != NULL) {

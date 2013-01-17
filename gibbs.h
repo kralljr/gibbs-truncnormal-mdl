@@ -18,8 +18,8 @@
 __BEGIN_DECLS
 
 void impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
-        const char *output_directory, size_t iterations, size_t skip, size_t
-        draws, long seed);
+        const char *output_directory, size_t iterations, size_t skip,
+        size_t draws, size_t progress, long seed);
 
 __END_DECLS
 

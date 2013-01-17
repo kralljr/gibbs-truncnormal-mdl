@@ -181,22 +181,6 @@ gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
     gsl_matrix_free(gsiginv);
 }
 
-void
-mhwithings(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
-        struct bdl *bdls, size_t nbdls, double minmdl, size_t iterations,
-        size_t skip, gsl_rng *rng)
-{
-    size_t i;
-
-    for (i = 0; i < iterations; i++) {
-        gibbsfun(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
-        fprintf(stderr, "%ld\n", i);
-
-        if (i > skip) {
-        }
-    }
-}
-
 static size_t
 count_bdls(const gsl_matrix *data, const gsl_matrix *mdls)
 {
@@ -218,14 +202,17 @@ count_bdls(const gsl_matrix *data, const gsl_matrix *mdls)
 
 void
 impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
-        const char *output_directory, size_t iterations, size_t skip,
-        size_t draws, long seed)
+        const char *output_directory, size_t iterations, size_t burn,
+        size_t draws, size_t progress, long seed)
 {
     gsl_rng *rng;
     gsl_matrix *gdat;
     gsl_vector *gthet;
     gsl_matrix *gsig;
     gsl_vector *tmp;
+    gsl_matrix *imputed_data;
+    gsl_vector *mean_mean;
+    gsl_matrix *mean_covariance;
     struct bdl *bdls;
     size_t nbdls;
     size_t i;
@@ -263,13 +250,46 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
         }
     }
 
+    imputed_data = gsl_matrix_alloc(iterations - burn, nbdls);
+    mean_mean = gsl_vector_alloc(data->size2);
+    mean_covariance = gsl_matrix_alloc(data->size2, data->size2);
+
     multivariate_mean(gdat, gthet);
     multivariate_covariance(gdat, gthet, gsig, tmp);
     minmdl = log(gsl_matrix_min(mdls));
 
-    mhwithings(gdat, gthet, gsig, bdls, nbdls, minmdl, iterations, skip, rng);
+    gsl_vector_set_zero(mean_mean);
+    gsl_matrix_set_zero(mean_covariance);
+
+    for (i = 0; i < iterations; i++) {
+        gibbsfun(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
+
+        if (i >= burn) {
+            gsl_vector_view view = gsl_matrix_row(imputed_data, i - burn);
+            size_t j;
+
+            for (j = 0; j < nbdls; j++) {
+                gsl_vector_set(&view.vector, j,
+                        gsl_matrix_get(gdat, bdls[j].row, bdls[j].col));
+            }
+            
+            gsl_vector_add(mean_mean, gthet);
+            gsl_matrix_add(mean_covariance, gsig);
+        }
+
+        if (progress > 0 && i % progress == 0) {
+            fprintf(stderr, "%ld\n", i);
+        }
+    }
+
+    gsl_vector_scale(mean_mean, iterations - burn);
+    gsl_matrix_scale(mean_covariance, iterations - burn);
 
     gsl_matrix_free(gdat);
     gsl_vector_free(gthet);
     gsl_matrix_free(gsig);
+    gsl_vector_free(tmp);
+    gsl_matrix_free(imputed_data);
+    gsl_vector_free(mean_mean);
+    gsl_matrix_free(mean_covariance);
 }
