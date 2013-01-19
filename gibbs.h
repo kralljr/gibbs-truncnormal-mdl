@@ -17,9 +17,25 @@
 
 __BEGIN_DECLS
 
-void impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
-        const char *output_directory, size_t iterations, size_t skip,
-        size_t draws, size_t progress, long seed);
+struct gibbs_problem {
+    const gsl_matrix *data;
+    const gsl_matrix *mdls;
+
+    size_t iterations;
+    size_t burn;
+    size_t draws;
+    long seed;
+
+    gsl_matrix *dat;
+    gsl_vector *mthet;
+    gsl_matrix *msig;
+    gsl_matrix **ddata;
+    size_t *dindexes;
+};
+
+void gibbs_problem_exec(struct gibbs_problem *p);
+void gibbs_problem_free(struct gibbs_problem *p);
+
 
 __END_DECLS
 

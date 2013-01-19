@@ -114,12 +114,11 @@ static void
 print_usage(const char *progname)
 {
     fprintf(stderr,
-            "Usage: %s [OPTION] DATA MDLS OUTDIR\n"
+            "Usage: %s [OPTION] DATA MDLS OUT\n"
             "  -n int   number of iterations (default 1000)\n"
             "  -b int   number of iterations to burn-in (default 0)\n"
             "  -d int   number of random draws (default 1)\n"
             "  -r int   random seed (default 0)\n"
-            "  -p int   print progress every n iterations (default 1000)\n"
             "  -h       show this help\n"
             , progname);
 }
@@ -131,12 +130,15 @@ main(int argc, char * const argv[])
 {
     const char *data_filename;
     const char *mdls_filename;
-    const char *output_directory;
-    size_t iterations = 1000;
-    size_t burn = 0;
-    size_t draws = 1;
-    size_t progress = 1000;
-    long seed = 0;
+    const char *output_filename;
+    struct gibbs_problem p = {
+        NULL,
+        NULL,
+        1000,
+        0,
+        1,
+        0,
+        NULL, NULL, NULL, NULL, NULL};
 
     gsl_matrix *data = NULL;
     gsl_matrix *mdls = NULL;
@@ -146,24 +148,21 @@ main(int argc, char * const argv[])
 
     opterr = 0;
 
-    while ((optflag = getopt(argc, argv, "n:b:d:r:p:h")) != -1) {
+    while ((optflag = getopt(argc, argv, "n:b:d:r:h")) != -1) {
         char *endptr = NULL;
 
         switch (optflag) {
             case 'n':
-                iterations = strtol(optarg, &endptr, 10);
+                p.iterations = strtol(optarg, &endptr, 10);
                 break;
             case 'b':
-                burn = strtol(optarg, &endptr, 10);
+                p.burn = strtol(optarg, &endptr, 10);
                 break;
             case 'd':
-                draws = strtol(optarg, &endptr, 10);
+                p.draws = strtol(optarg, &endptr, 10);
                 break;
             case 'r':
-                seed = strtol(optarg, &endptr, 0);
-                break;
-            case 'p':
-                progress = strtol(optarg, &endptr, 0);
+                p.seed = strtol(optarg, &endptr, 0);
                 break;
             case 'h':
                 print_usage(argv[0]);
@@ -191,11 +190,11 @@ main(int argc, char * const argv[])
     mdls_filename = argv[optind++];
 
     if (optind == argc) {
-        fprintf(stderr, "%s: missing argument OUTDIR\n", argv[0]);
+        fprintf(stderr, "%s: missing argument OUT\n", argv[0]);
         print_usage(argv[0]);
         return 1;
     }
-    output_directory = argv[optind++];
+    output_filename = argv[optind++];
 
     if (optind < argc) {
         fprintf(stderr, "%s: unexpected argument: %s\n", argv[0], argv[optind]);
@@ -225,8 +224,11 @@ main(int argc, char * const argv[])
         goto exit;
     }
 
-    impute_data(data, mdls, output_directory, iterations, burn, draws, progress,
-            seed);
+    p.data = data;
+    p.mdls = mdls;
+
+    gibbs_problem_exec(&p);
+    gibbs_problem_free(&p);
 
 exit:
     if (data != NULL) {

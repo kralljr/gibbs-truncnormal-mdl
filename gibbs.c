@@ -20,19 +20,76 @@
 struct bdl {
     double lim;     /* Detection limit */
     size_t row;     /* Row (zero-indexed) - day */
-    size_t col;     /* Column (zero-indexed) - day */
+    size_t col;     /* Column (zero-indexed) - constituent */
 };
+
+struct work {
+    size_t time;
+    size_t cons;
+
+    gsl_matrix *m_time_cons;
+    gsl_matrix *m_cons_cons;
+    gsl_vector *v_cons;
+
+    gsl_matrix *m_consm1_consm1;
+    gsl_vector *v_consm1;
+
+    double *da_cons;
+    gsl_vector **va_consm1_cons;
+};
+
+static struct work *
+work_new(size_t time, size_t cons)
+{
+    struct work *w;
+    size_t i;
+
+    w = malloc(sizeof (struct work));
+    w->time = time;
+    w->cons = cons;
+
+    w->m_time_cons = gsl_matrix_alloc(time, cons);
+    w->m_cons_cons = gsl_matrix_alloc(cons, cons);
+    w->v_cons = gsl_vector_alloc(cons);
+
+    w->m_consm1_consm1 = gsl_matrix_alloc(cons - 1, cons - 1);
+    w->v_consm1 = gsl_vector_alloc(cons - 1);
+
+    w->da_cons = calloc(cons, sizeof (double));
+    w->va_consm1_cons = calloc(cons, sizeof (struct gsl_vector *));
+    for (i = 0; i < cons; i++) {
+        w->va_consm1_cons[i] = gsl_vector_alloc(cons - 1);
+    }
+
+    return w;
+}
+
+static void
+work_free(struct work *w)
+{
+    size_t i;
+
+    gsl_matrix_free(w->m_time_cons);
+    gsl_matrix_free(w->m_cons_cons);
+    gsl_vector_free(w->v_cons);
+
+    gsl_matrix_free(w->m_consm1_consm1);
+    gsl_vector_free(w->v_consm1);
+
+    free(w->da_cons);
+    for (i = 0; i < w->cons; i++) {
+        gsl_vector_free(w->va_consm1_cons[i]);
+    }
+    free(w->va_consm1_cons);
+
+    free(w);
+}
 
 static double
 impmissvar(const gsl_matrix *gsig, const gsl_matrix *gsiginv, size_t col,
-        gsl_vector *prod)
+        gsl_matrix *cov11, gsl_vector *cov01, gsl_vector *prod)
 {
-    gsl_matrix *cov11;
-    gsl_vector *cov01;
     double ss;
-
-    cov11 = gsl_matrix_alloc(gsig->size1 - 1, gsig->size2 - 1);
-    cov01 = gsl_vector_alloc(gsig->size1 - 1);
 
     /* prod <- cov01' * inv(cov11) */
     matrix_invert_remove_rowcol(gsiginv, col, cov11, cov01);
@@ -41,9 +98,6 @@ impmissvar(const gsl_matrix *gsig, const gsl_matrix *gsiginv, size_t col,
 
     /* ss <- cov01' * inv(cov11) * cov01 */
     gsl_blas_ddot(prod, cov01, &ss);
-
-    gsl_matrix_free(cov11); 
-    gsl_vector_free(cov01);
     
     return gsl_matrix_get(gsig, col, col) - ss;
 }
@@ -73,24 +127,18 @@ impmissmean(const gsl_matrix *gdat, const gsl_vector *gthet,
 void
 ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
         const struct bdl *bdls, size_t nbdls, const gsl_matrix *gsiginv,
-        double minmdl, const gsl_rng *rng)
+        double minmdl, const gsl_rng *rng, struct work *work)
 {
     size_t i;
-    gsl_matrix *data_copy;
-    double *vars;
-    gsl_vector **prods;
-    size_t ncons;
-
-    data_copy = gsl_matrix_alloc(gdat->size1, gdat->size2);
+    gsl_matrix *data_copy = work->m_time_cons;
+    double *vars = work->da_cons;
+    gsl_vector **prods = work->va_consm1_cons;
 
     gsl_matrix_memcpy(data_copy, gdat);
 
-    ncons = gsig->size2;
-    vars = calloc(ncons, sizeof (double));
-    prods = calloc(ncons, sizeof (gsl_vector *));
-    for (i = 0; i < ncons; i++) {
-        prods[i] = gsl_vector_alloc(gsig->size1 - 1);
-        vars[i] = impmissvar(gsig, gsiginv, i, prods[i]);
+    for (i = 0; i < gsig->size2; i++) {
+        vars[i] = impmissvar(gsig, gsiginv, i, work->m_consm1_consm1,
+                work->v_consm1, prods[i]);
     }
 
     for (i = 0; i < nbdls; i++) {
@@ -105,14 +153,6 @@ ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
                 sqrt(var));
         gsl_matrix_set(gdat, bdls[i].row, bdls[i].col, newmiss);
     }
-
-    gsl_matrix_free(data_copy);
-    free(vars);
-
-    for (i = 0; i < ncons; i++) {
-        gsl_vector_free(prods[i]);
-    }
-    free(prods);
 }
 
 /**
@@ -131,13 +171,10 @@ matrix_column_sweep(gsl_matrix *A, const gsl_vector *v)
 
 void
 thetfun(const gsl_matrix *gdat, gsl_vector *gthet, const gsl_matrix *gsig,
-        const gsl_matrix *gsiginv, const gsl_rng *rng)
+        const gsl_matrix *gsiginv, const gsl_rng *rng, struct work *work)
 {
-    gsl_matrix *chol;
-    gsl_vector *means;
-
-    chol = gsl_matrix_alloc(gsig->size1, gsig->size2);
-    means = gsl_vector_alloc(gthet->size);
+    gsl_matrix *chol = work->m_cons_cons;
+    gsl_vector *means = work->v_cons;
 
     gsl_matrix_memcpy(chol, gsiginv);
     gsl_matrix_scale(chol, gsig->size1);
@@ -151,21 +188,15 @@ thetfun(const gsl_matrix *gdat, gsl_vector *gthet, const gsl_matrix *gsig,
     gsl_blas_dgemv(CblasNoTrans, 1.0, chol, gthet, 0.0, means);
 
     ran_multivariate_normal(rng, means, chol, gthet);
-
-    gsl_matrix_free(chol);
-    gsl_vector_free(means);
 }
 
 void
 sigfun(const gsl_matrix *gdat, const gsl_vector *gthet, gsl_matrix *gsig,
-        const gsl_rng *rng)
+        const gsl_rng *rng, struct work *work)
 {
-    gsl_matrix *swp;
-    gsl_matrix *scale;
+    gsl_matrix *swp = work->m_time_cons;
+    gsl_matrix *scale = work->m_cons_cons;
     double nu;
-
-    swp = gsl_matrix_alloc(gdat->size1, gdat->size2);
-    scale = gsl_matrix_alloc(gdat->size2, gdat->size2);
 
     /* swp <- sweep(gdat, 2, gthet) */
     gsl_matrix_memcpy(swp, gdat);
@@ -179,14 +210,12 @@ sigfun(const gsl_matrix *gdat, const gsl_vector *gthet, gsl_matrix *gsig,
     /* gsig <- riwish(nu, scale) */    
     nu = gdat->size1 + gdat->size2 + 1;
     ran_invwishart(rng, nu, scale, gsig);
-
-    gsl_matrix_free(swp);
-    gsl_matrix_free(scale);
 }
 
 void
 gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
-        const struct bdl *bdls, size_t nbdls, double minmdl, const gsl_rng *rng)
+        const struct bdl *bdls, size_t nbdls, double minmdl, const gsl_rng *rng,
+        struct work *work)
 {
     gsl_matrix *gsiginv;
 
@@ -196,9 +225,9 @@ gibbsfun(gsl_matrix *gdat, gsl_vector *gthet, gsl_matrix *gsig,
     gsl_linalg_cholesky_decomp(gsiginv);
     gsl_linalg_cholesky_invert(gsiginv);
 
-    ymissfun(gdat, gthet, gsig, bdls, nbdls, gsiginv, minmdl, rng);
-    thetfun(gdat, gthet, gsig, gsiginv, rng);
-    sigfun(gdat, gthet, gsig, rng);
+    ymissfun(gdat, gthet, gsig, bdls, nbdls, gsiginv, minmdl, rng, work);
+    thetfun(gdat, gthet, gsig, gsiginv, rng, work);
+    sigfun(gdat, gthet, gsig, rng, work);
 
     gsl_matrix_free(gsiginv);
 }
@@ -222,36 +251,16 @@ count_bdls(const gsl_matrix *data, const gsl_matrix *mdls)
     return nbdls; 
 }
 
-void
-impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
-        const char *output_directory, size_t iterations, size_t burn,
-        size_t draws, size_t progress, long seed)
+static double
+find_bdls(const gsl_matrix *data, const gsl_matrix *mdls, gsl_matrix *gdat,
+        struct bdl *bdls)
 {
-    gsl_rng *rng;
-    gsl_matrix *gdat;
-    gsl_vector *gthet;
-    gsl_matrix *gsig;
-    gsl_vector *tmp;
-    gsl_matrix *imputed_data;
-    gsl_vector *mean_mean;
-    gsl_matrix *mean_covariance;
-    struct bdl *bdls;
-    size_t nbdls;
+    double minmdl;
     size_t i;
     size_t j;
     size_t k;
-    double minmdl;
 
-    rng = gsl_rng_alloc(gsl_rng_taus);
-    gsl_rng_set(rng, seed);
-
-    gdat = gsl_matrix_alloc(data->size1, data->size2);
-    gthet = gsl_vector_alloc(data->size2);
-    gsig = gsl_matrix_alloc(gdat->size2, gdat->size2);
-    tmp = gsl_vector_alloc(data->size2);
-
-    nbdls = count_bdls(data, mdls);
-    bdls = calloc(nbdls, sizeof (struct bdl));
+    minmdl = gsl_matrix_get(mdls, 0, 0);
     k = 0;
     for (i = 0; i < data->size1; i++) {
         for (j = 0; j < data->size2; j++) {
@@ -269,49 +278,168 @@ impute_data(const gsl_matrix *data, const gsl_matrix *mdls,
             } else {
                 gsl_matrix_set(gdat, i, j, log(delem));
             }
-        }
-    }
 
-    imputed_data = gsl_matrix_alloc(iterations - burn, nbdls);
-    mean_mean = gsl_vector_alloc(data->size2);
-    mean_covariance = gsl_matrix_alloc(data->size2, data->size2);
-
-    multivariate_mean(gdat, gthet);
-    multivariate_covariance(gdat, gthet, gsig, tmp);
-    minmdl = log(gsl_matrix_min(mdls));
-
-    gsl_vector_set_zero(mean_mean);
-    gsl_matrix_set_zero(mean_covariance);
-
-    for (i = 0; i < iterations; i++) {
-        gibbsfun(gdat, gthet, gsig, bdls, nbdls, minmdl, rng);
-
-        if (i >= burn) {
-            gsl_vector_view view = gsl_matrix_row(imputed_data, i - burn);
-            size_t j;
-
-            for (j = 0; j < nbdls; j++) {
-                gsl_vector_set(&view.vector, j,
-                        gsl_matrix_get(gdat, bdls[j].row, bdls[j].col));
+            if (melem < minmdl) {
+                minmdl = melem;
             }
-            
-            gsl_vector_add(mean_mean, gthet);
-            gsl_matrix_add(mean_covariance, gsig);
-        }
-
-        if (progress > 0 && i % progress == 0) {
-            fprintf(stderr, "%ld\n", i);
         }
     }
 
-    gsl_vector_scale(mean_mean, iterations - burn);
-    gsl_matrix_scale(mean_covariance, iterations - burn);
+    return log(minmdl);
+}
 
+static int
+cmp_size_t(const void *s1, const void *s2)
+{
+    const size_t x1 = *(const size_t *) s1;
+    const size_t x2 = *(const size_t *) s2; 
+
+    if (x1 < x2) {
+        return -1;
+    } else if (x1 > x2) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static void
+qsort_size_t(size_t *s, size_t n)
+{
+    qsort(s, n, sizeof (size_t), cmp_size_t);
+}
+
+static void
+generate_draws(gsl_rng *rng, size_t *iterations, size_t ndraws, size_t min,
+        size_t max)
+{
+    size_t i = 0;
+
+    while (i < ndraws) {
+        size_t j;
+        size_t new_draw;
+        int repeat;
+
+        new_draw = gsl_rng_uniform_int(rng, max - min) + min;
+        repeat = 0;
+        for (j = 0; j < i; j++) {
+            if (new_draw == iterations[j]) {
+                repeat = 1;
+                break;
+            }
+        }
+
+        if (!repeat) {
+            iterations[i] = new_draw;
+            i++;
+        }
+    }
+
+    qsort_size_t(iterations, ndraws);
+}
+
+static void
+gibbs_problem_alloc(struct gibbs_problem *p)
+{
+    size_t time;
+    size_t cons;
+    size_t i;
+
+    time = p->data->size1;
+    cons = p->data->size2;
+
+    p->dindexes = calloc(p->draws, sizeof (size_t));
+    p->ddata = calloc(p->draws, sizeof (gsl_matrix *));
+    for (i = 0; i < p->draws; i++) {
+        p->ddata[i] = gsl_matrix_alloc(time, cons);
+    }
+    p->dat = gsl_matrix_alloc(time, cons);
+    p->mthet = gsl_vector_alloc(cons);
+    p->msig = gsl_matrix_alloc(cons, cons);
+}
+
+void
+gibbs_problem_exec(struct gibbs_problem *p)
+{
+    size_t time;
+    size_t cons;
+
+    gsl_rng *rng;
+
+    gsl_matrix *gdat;
+    gsl_vector *gthet;
+    gsl_matrix *gsig;
+
+    size_t nbdls;
+    struct bdl *bdls;
+    double minmdl;
+    struct work *work;
+
+    size_t i;
+    size_t j;
+
+    time = p->data->size1;
+    cons = p->data->size2;
+
+    gibbs_problem_alloc(p);
+    rng = gsl_rng_alloc(gsl_rng_taus);
+    work = work_new(time, cons);
+
+    gdat = gsl_matrix_alloc(time, cons);
+    gthet = gsl_vector_alloc(cons);
+    gsig = gsl_matrix_alloc(cons, cons);
+
+    nbdls = count_bdls(p->data, p->mdls);
+    bdls = calloc(nbdls, sizeof (struct bdl));
+
+    minmdl = find_bdls(p->data, p->mdls, gdat, bdls);
+    multivariate_mean(gdat, gthet);
+    multivariate_covariance(gdat, gthet, gsig, p->mthet);
+
+    gsl_vector_set_zero(p->mthet);
+    gsl_matrix_set_zero(p->msig);
+
+    gsl_rng_set(rng, p->seed);
+    generate_draws(rng, p->dindexes, p->draws, p->burn, p->iterations);
+
+    j = 0;
+    for (i = 0; i < p->iterations; i++) {
+        gibbsfun(gdat, gthet, gsig, bdls, nbdls, minmdl, rng, work);
+
+        if (i >= p->burn) {
+            gsl_vector_add(p->mthet, gthet);
+            gsl_matrix_add(p->msig, gsig);
+        }
+
+        if (j < p->draws && i == p->dindexes[j]) {
+            gsl_matrix_memcpy(p->ddata[j], gdat);
+            j++;
+        }
+    }
+
+    gsl_matrix_memcpy(p->dat, gdat);
+    gsl_vector_scale(p->mthet, p->iterations - p->burn);
+    gsl_matrix_scale(p->msig, p->iterations - p->burn);
+
+    work_free(work);
+    gsl_rng_free(rng);
     gsl_matrix_free(gdat);
     gsl_vector_free(gthet);
     gsl_matrix_free(gsig);
-    gsl_vector_free(tmp);
-    gsl_matrix_free(imputed_data);
-    gsl_vector_free(mean_mean);
-    gsl_matrix_free(mean_covariance);
+    free(bdls);
+}
+
+void
+gibbs_problem_free(struct gibbs_problem *p)
+{
+    size_t i;
+
+    free(p->dindexes);
+    for (i = 0; i < p->draws; i++) {
+        gsl_matrix_free(p->ddata[i]);
+    }
+    free(p->ddata);
+    gsl_matrix_free(p->dat);
+    gsl_vector_free(p->mthet);
+    gsl_matrix_free(p->msig);
 }
