@@ -1,6 +1,8 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -O0 -g
-LDFLAGS=-lm -lgslcblas -lgsl
+NC_CFLAGS=$(shell pkg-config --cflags netcdf)
+NC_LDFLAGS=$(shell pkg-config --libs netcdf)
+CFLAGS=$(NC_CFLAGS) -Wall -Wextra -O0 -g
+LDFLAGS=$(NC_LDFLAGS) -lm -lgslcblas -lgsl
 
 all: gibbs rwishart rmvnorm rtnorm
 

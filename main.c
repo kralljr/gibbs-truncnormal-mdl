@@ -7,6 +7,8 @@
 
 #include <gsl/gsl_matrix.h>
 
+#include <netcdf.h>
+
 #include "csv.h"
 #include "gibbs.h"
 
@@ -108,6 +110,81 @@ csv_load_file(const char *filename)
     fclose(f);
 
     return M;
+}
+
+static void
+ncdf_write_file(const char *filename, const struct gibbs_problem *p)
+{
+    int ncid;
+    int time_dim_id;
+    int cons_dim_id;
+    int draw_dim_id;
+    int dim_ids[3];
+    int data_var_id;
+    int mthet_var_id;
+    int msig_var_id;
+    size_t i;
+
+    nc_create(filename, NC_CLOBBER | NC_NETCDF4 | NC_CLASSIC_MODEL, &ncid);
+
+    nc_def_dim(ncid, "time", p->data->size1, &time_dim_id);
+    nc_def_dim(ncid, "constituents", p->data->size2, &cons_dim_id);
+    nc_def_dim(ncid, "draws", p->draws, &draw_dim_id);
+
+    nc_put_att_long(ncid, NC_GLOBAL, "iterations", NC_INT, 1, (long *) &p->iterations);
+    nc_put_att_long(ncid, NC_GLOBAL, "burn", NC_INT, 1, (long *) &p->burn);
+    nc_put_att_long(ncid, NC_GLOBAL, "seed", NC_INT, 1, &p->seed);
+
+    nc_def_var(ncid, "mean", NC_DOUBLE, 1, &cons_dim_id, &mthet_var_id);
+
+    dim_ids[0] = cons_dim_id;
+    dim_ids[1] = cons_dim_id;
+    nc_def_var(ncid, "covariance", NC_DOUBLE, 2, dim_ids, &msig_var_id);
+
+    dim_ids[0] = cons_dim_id;
+    dim_ids[1] = time_dim_id;
+    dim_ids[2] = draw_dim_id;
+    nc_def_var(ncid, "data", NC_DOUBLE, 3, dim_ids, &data_var_id);
+    nc_def_var_deflate(ncid, data_var_id, 1, 1, 5);
+
+    nc_enddef(ncid);
+
+    nc_put_var_double(ncid, mthet_var_id, p->mthet->data);
+
+    if (p->msig->size2 == p->msig->tda) {
+        nc_put_var_double(ncid, msig_var_id, p->msig->data);
+    } else {
+        for (i = 0; i < p->msig->size1; i++) {
+            gsl_vector_const_view v = gsl_matrix_const_row(p->msig, i);
+            size_t start[2] = {0, i};
+            size_t count[2] = {p->msig->size2, 1};
+
+            nc_put_vara_double(ncid, msig_var_id, start, count, v.vector.data);
+        }
+    }
+
+    for (i = 0; i < p->draws; i++) {
+        const gsl_matrix *m = p->ddata[i];
+
+        if (m->size2 == m->tda) {
+            size_t start[3] = {0, 0, i};
+            size_t count[3] = {m->size2, m->size1, 1};
+
+            nc_put_vara_double(ncid, data_var_id, start, count, m->data);
+        } else {
+            size_t j;
+
+            for (j = 0; j < m->size1; i++) {
+                gsl_vector_const_view v = gsl_matrix_const_row(m, j);
+                size_t start[3] = {0, j, i};
+                size_t count[3] = {m->size2, 1, 1};
+
+                nc_put_vara_double(ncid, data_var_id, start, count, v.vector.data);
+            }
+        }
+    }
+
+    nc_close(ncid);
 }
 
 static void
@@ -228,6 +305,7 @@ main(int argc, char * const argv[])
     p.mdls = mdls;
 
     gibbs_problem_exec(&p);
+    ncdf_write_file(output_filename, &p);
     gibbs_problem_free(&p);
 
 exit:
