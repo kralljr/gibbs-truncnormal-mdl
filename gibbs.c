@@ -85,6 +85,19 @@ work_free(struct work *w)
     free(w);
 }
 
+static void
+gsl_matrix_exp(gsl_matrix *m)
+{
+    size_t i;
+    size_t j;
+
+    for (i = 0; i < m->size1; i++) {
+        for (j = 0; j < m->size2; j++) {
+            gsl_matrix_set(m, i, j, exp(gsl_matrix_get(m, i, j)));
+        }
+    }
+}
+
 static double
 impmissvar(const gsl_matrix *gsig, const gsl_matrix *gsiginv, size_t col,
         gsl_matrix *cov11, gsl_vector *cov01, gsl_vector *prod)
@@ -353,7 +366,6 @@ gibbs_problem_alloc(struct gibbs_problem *p)
     for (i = 0; i < p->draws; i++) {
         p->ddata[i] = gsl_matrix_alloc(time, cons);
     }
-    p->dat = gsl_matrix_alloc(time, cons);
     p->mthet = gsl_vector_alloc(cons);
     p->msig = gsl_matrix_alloc(cons, cons);
 }
@@ -413,13 +425,17 @@ gibbs_problem_exec(struct gibbs_problem *p)
 
         if (j < p->draws && i == p->dindexes[j]) {
             gsl_matrix_memcpy(p->ddata[j], gdat);
+            gsl_matrix_exp(p->ddata[j]);
             j++;
         }
     }
 
-    gsl_matrix_memcpy(p->dat, gdat);
-    gsl_vector_scale(p->mthet, p->iterations - p->burn);
-    gsl_matrix_scale(p->msig, p->iterations - p->burn);
+    gsl_vector_scale(p->mthet, 1.0 / (p->iterations - p->burn));
+    gsl_matrix_view v = gsl_matrix_view_vector(p->mthet, cons, 1);
+    gsl_matrix_exp(&v.matrix);
+
+    gsl_matrix_scale(p->msig, 1.0 / (p->iterations - p->burn));
+    gsl_matrix_exp(p->msig);
 
     work_free(work);
     gsl_rng_free(rng);
