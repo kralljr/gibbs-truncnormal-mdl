@@ -98,6 +98,20 @@ gsl_matrix_exp(gsl_matrix *m)
     }
 }
 
+/**
+ * Subtract v from each row of A.
+ */
+static void
+matrix_column_sweep(gsl_matrix *A, const gsl_vector *v)
+{
+    size_t i;
+
+    for (i = 0; i < A->size1; i++) {
+        gsl_vector_view vA = gsl_matrix_row(A, i);
+        gsl_vector_sub(&vA.vector, v);
+    }
+}
+
 static double
 impmissvar(const gsl_matrix *gsig, const gsl_matrix *gsiginv, size_t col,
         gsl_matrix *cov11, gsl_vector *cov01, gsl_vector *prod)
@@ -130,11 +144,11 @@ impmissmean(const gsl_matrix *gdat, const gsl_vector *gthet,
     /* mnmiss <- cov01' * inv(cov11) * (y[-i] - gthet[-i]) */
     mnmiss = gthet->data[col];
     for (i = 0; i < col; i++) {
-        mnmiss += (vA.vector.data[i] - gthet->data[i]) * prod->data[i];
+        mnmiss += vA.vector.data[i] * prod->data[i];
     }
 
     for (i = col + 1; i < gdat->size2; i++) {
-        mnmiss += (vA.vector.data[i] - gthet->data[i]) * prod->data[i - 1];
+        mnmiss += vA.vector.data[i] * prod->data[i - 1];
     }
     
     return mnmiss;
@@ -147,41 +161,27 @@ ymissfun(gsl_matrix *gdat, const gsl_vector *gthet, const gsl_matrix *gsig,
 {
     size_t i;
     gsl_matrix *data_copy = work->m_time_cons;
-    double *vars = work->da_cons;
+    double *stds = work->da_cons;
     gsl_vector **prods = work->va_consm1_cons;
 
     gsl_matrix_memcpy(data_copy, gdat);
+    matrix_column_sweep(data_copy, gthet);
 
     for (i = 0; i < gsig->size2; i++) {
-        vars[i] = impmissvar(gsig, gsiginv, i, work->m_consm1_consm1,
-                work->v_consm1, prods[i]);
+        stds[i] = sqrt(impmissvar(gsig, gsiginv, i, work->m_consm1_consm1,
+                work->v_consm1, prods[i]));
     }
 
     for (i = 0; i < nbdls; i++) {
         double mean;
-        double var;
+        double std;
         double newmiss;
 
         mean = impmissmean(data_copy, gthet, bdls[i].row, bdls[i].col,
                 prods[bdls[i].col]);
-        var = vars[bdls[i].col];
-        newmiss = ran_truncnormal(rng, minmdl - 10.0, bdls[i].lim, mean,
-                sqrt(var));
+        std = stds[bdls[i].col];
+        newmiss = ran_truncnormal(rng, minmdl - 10.0, bdls[i].lim, mean, std);
         gsl_matrix_set(gdat, bdls[i].row, bdls[i].col, newmiss);
-    }
-}
-
-/**
- * Subtract v from each row of A.
- */
-static void
-matrix_column_sweep(gsl_matrix *A, const gsl_vector *v)
-{
-    size_t i;
-
-    for (i = 0; i < A->size1; i++) {
-        gsl_vector_view vA = gsl_matrix_row(A, i);
-        gsl_vector_sub(&vA.vector, v);
     }
 }
 

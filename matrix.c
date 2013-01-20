@@ -16,18 +16,14 @@
 void
 vector_remove_elem(const gsl_vector *u, size_t i, gsl_vector *v)
 {
-    if (i > 0) {
-        gsl_vector_const_view uhead = gsl_vector_const_subvector(u, 0, i);
-        gsl_vector_view vhead = gsl_vector_subvector(v, 0, i);
-        gsl_vector_memcpy(&vhead.vector, &uhead.vector);
+    size_t j;
+
+    for (j = 0; j < i; j++) {
+        v->data[j] = u->data[j];
     }
 
-    if (i + 1 < u->size) {
-        gsl_vector_const_view utail =
-                gsl_vector_const_subvector(u, i + 1, u->size - i - 1);
-        gsl_vector_view vtail =
-                gsl_vector_subvector(v, i, u->size - i - 1);
-        gsl_vector_memcpy(&vtail.vector, &utail.vector);
+    for (j = i + 1; j < u->size; j++) {
+        v->data[j - 1] = u->data[j];
     }
 }
 
