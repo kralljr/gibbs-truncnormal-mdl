@@ -121,20 +121,23 @@ impmissmean(const gsl_matrix *gdat, const gsl_vector *gthet,
 {
     double mnmiss;
     size_t i;
+    gsl_vector_const_view vA = gsl_matrix_const_row(gdat, row);
+
+    /* Directly access vector elements instead of using gsl_vector_get because
+     * it's much cheaper - at least for the number of times that we need to do
+     * it. */
 
     /* mnmiss <- cov01' * inv(cov11) * (y[-i] - gthet[-i]) */
-    mnmiss = 0.0;
+    mnmiss = gthet->data[col];
     for (i = 0; i < col; i++) {
-        mnmiss += (gsl_matrix_get(gdat, row, i) - gsl_vector_get(gthet, i)) *
-                gsl_vector_get(prod, i);
+        mnmiss += (vA.vector.data[i] - gthet->data[i]) * prod->data[i];
     }
 
     for (i = col + 1; i < gdat->size2; i++) {
-        mnmiss += (gsl_matrix_get(gdat, row, i) - gsl_vector_get(gthet, i)) *
-                gsl_vector_get(prod, i - 1);
+        mnmiss += (vA.vector.data[i] - gthet->data[i]) * prod->data[i - 1];
     }
     
-    return gsl_vector_get(gthet, col) + mnmiss;
+    return mnmiss;
 }
 
 void
