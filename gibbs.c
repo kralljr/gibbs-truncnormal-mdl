@@ -426,16 +426,13 @@ gibbs_problem_exec(struct gibbs_problem *p)
         if (j < p->draws && i == p->dindexes[j]) {
             gsl_matrix_memcpy(p->ddata[j], gdat);
             gsl_matrix_exp(p->ddata[j]);
+            
             j++;
         }
     }
 
     gsl_vector_scale(p->mthet, 1.0 / (p->iterations - p->burn));
-    gsl_matrix_view v = gsl_matrix_view_vector(p->mthet, cons, 1);
-    gsl_matrix_exp(&v.matrix);
-
     gsl_matrix_scale(p->msig, 1.0 / (p->iterations - p->burn));
-    gsl_matrix_exp(p->msig);
 
     work_free(work);
     gsl_rng_free(rng);

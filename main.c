@@ -141,9 +141,9 @@ ncdf_write_file(const char *filename, const struct gibbs_problem *p)
     dim_ids[1] = cons_dim_id;
     nc_def_var(ncid, "covariance", NC_DOUBLE, 2, dim_ids, &msig_var_id);
 
-    dim_ids[0] = cons_dim_id;
+    dim_ids[2] = cons_dim_id;
     dim_ids[1] = time_dim_id;
-    dim_ids[2] = draw_dim_id;
+    dim_ids[0] = draw_dim_id;
     nc_def_var(ncid, "data", NC_DOUBLE, 3, dim_ids, &data_var_id);
     nc_def_var_deflate(ncid, data_var_id, 1, 1, 5);
 
@@ -167,8 +167,8 @@ ncdf_write_file(const char *filename, const struct gibbs_problem *p)
         const gsl_matrix *m = p->ddata[i];
 
         if (m->size2 == m->tda) {
-            size_t start[3] = {0, 0, i};
-            size_t count[3] = {m->size2, m->size1, 1};
+            size_t start[3] = {i, 0, 0};
+            size_t count[3] = {1, m->size1, m->size2};
 
             nc_put_vara_double(ncid, data_var_id, start, count, m->data);
         } else {
