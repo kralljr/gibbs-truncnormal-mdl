@@ -26,7 +26,6 @@ struct gibbs_problem {
     size_t draws;
     long seed;
 
-    gsl_matrix *dat;
     gsl_vector *mthet;
     gsl_matrix *msig;
     gsl_matrix **ddata;
