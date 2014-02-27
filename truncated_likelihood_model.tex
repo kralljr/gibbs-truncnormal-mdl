@@ -1,0 +1,28 @@
+\documentclass{article}  
+\usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry}
+\usepackage{amsmath,amsfonts,bm}
+\usepackage{setspace}
+\doublespacing
+
+
+\begin{document}
+
+This document describes our likelihood-based approach to multiply impute censored data of the form ${\bf Y}_{T\times P}$, where $T$ is the number of observations and $P$ is the number of variables.  In ${\bf Y}$, there are some data which are censored For each observation $t$, we assumed ${\bf y_t}\sim \text{MVN}({\bm \theta},{\bm \Sigma})$.  
+
+First ${\bm \theta}$ and ${\bm \Sigma}$ are estimated using a Markov Chain Monte Carlo approach to sample from the posterior distributions of ${\bm \theta}$ and ${\bm \Sigma}$, since the censored data make using standard maximum likelihood estimators difficult.  We used conjugate priors ${\bm \theta}\sim \text{MVN} ({\bf 0}, 10^5 {\bf I})$ and ${\bm \Sigma}\sim \text{inv-Wishart}(P+1, {\bf I})$, where ${\bf I}$ is the $P\times P$ identity matrix.  We directly sampled from the posterior distributions of ${\bm \theta}$, ${\bm \Sigma}$, and the censored constituent concentrations using Gibbs sampling.  Letting ${\bf Y}=\log({\bf X})$, the full conditionals for ${\bm \theta}$ and ${\bm \Sigma}$ are
+\begin{align}
+({\bm \theta}~|~{\bm \Sigma},{\bf Y}) &\sim \text{MVN}\bigg(\left(10^{-5} {\bf I} + n{\bm \Sigma}^{-1}\right)^{-1} \left(  n {\bm \Sigma}^{-1} {\bar{{{\bf y}}}} \right),~\left(10^{-5}  {\bf I} + n{\bm \Sigma}^{-1}\right)^{-1} \bigg) \label{thet}\\
+({\bm \Sigma} ~|~ {\bm \theta}, {\bf Y}) &\sim \text{inv-Wishart}\left(n + P + 1,~  {\bf I} + \sum_{t=1}^n({\bf y}_{t} - {\bm \theta})({\bf y}_t-{\bm \theta})^T\right) \label{sig} 
+\end{align}
+where $\bar{{\bf y}}=(\bar{y}_1, \bar{y}_2,...,\bar{y}_P)^T$.  For each observation $t$, let ${{ y}}_{tp}$ be the data for a censored variable $p$ and ${\bf y}_{tq}$ be the data for the remaining $q$ variables.  The distribution of ${ y}_{tp}$ conditional on ${\bf y}_{tq}$ is truncated normal,
+\begin{align}
+({ y}_{tp} ~|~ {\bf y}_{tq}, {\bm \theta},{\bm \Sigma}) &\sim \text{ trunc-N}\bigg({ \theta}_{p} + {\bm \Sigma}_{pq}{\bm \Sigma}_{ q}^{-1}({\bf y}_{{tq}}-{\bm \theta}_{{q}}), ~{ \Sigma}_{p} - {\bm \Sigma}_{pq}{\bm \Sigma}_{q}^{-1}{\bm \Sigma}_{pq}^T\bigg) \label{cond}
+\end{align}
+where ${ y}_{tp}$ is censored, ${\bm \Sigma}_{pq}$ is the covariance between variable $p$ and the remaining variables $q$, and
+$\theta_p,~{\bm \theta}_q,~\Sigma_p,$ and ${\bm \Sigma}_q$ refer to the subsets of ${\bm\theta}$ and ${\bm \Sigma}$ corresponding to constituents $p$ and $q$. 
+
+To impute the censored data, the function draws $N$ samples from the joint distribution of ${\bm \theta}$, ${\bm \Sigma}$, and the censored data by iteratively sampling from the three distributions (equations~(\ref{thet}),~(\ref{sig}), and~(\ref{cond})) and updating the values for ${\bm \theta},~{\bm \Sigma},$ and each censored $y_{tp}$.  Let $\hat{{\bm \theta}}$ and $\hat{\bm \Sigma}$ be the posterior means of  ${\bm \theta}$ and ${\bm \Sigma}$.  Each censored observation $y_{tp}$ is imputed using a random draw from the truncated normal in equation~\ref{cond}, conditioning on observed variables on day $t$ and replacing ${{\bm \theta}}$ and ${\bm \Sigma}$ with $\hat{{\bm \theta}}$ and $\hat{\bm \Sigma}$.  
+
+
+
+\end{document}

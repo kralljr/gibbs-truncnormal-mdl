@@ -3,8 +3,8 @@ NC_CFLAGS=$(shell pkg-config --cflags netcdf)
 NC_LDFLAGS=$(shell pkg-config --libs netcdf)
 GSL_CFLAGS=$(shell pkg-config --cflags gsl)
 GSL_LDFLAGS=$(shell pkg-config --libs gsl)
-CFLAGS=$(NC_CFLAGS) $(GSL_CFLAGS) -Wall -Wextra -O0 -g
-LDFLAGS=$(NC_LDFLAGS) $(GSL_LDFLAGS)
+CFLAGS=$(NC_CFLAGS) $(GSL_CFLAGS) -Wall -Wextra -O3 -DHAVE_INLINE
+LDFLAGS=$(NC_LDFLAGS) -lgsl -framework Accelerate -lm
 
 all: gibbs rwishart rmvnorm rtnorm
 
