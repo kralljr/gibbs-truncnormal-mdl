@@ -215,7 +215,7 @@ main(int argc, char * const argv[])
         0,
         1,
         0,
-        NULL, NULL, NULL, NULL, NULL};
+        NULL, NULL, NULL, NULL};
 
     gsl_matrix *data = NULL;
     gsl_matrix *mdls = NULL;

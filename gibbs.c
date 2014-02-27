@@ -455,7 +455,6 @@ gibbs_problem_free(struct gibbs_problem *p)
         gsl_matrix_free(p->ddata[i]);
     }
     free(p->ddata);
-    gsl_matrix_free(p->dat);
     gsl_vector_free(p->mthet);
     gsl_matrix_free(p->msig);
 }
