@@ -105,6 +105,58 @@ lhood <- function(dat, mdls,
 
 
 
+
+
+##########################################
+#Function to run in C (C code must be compiled)
+##########################################
+
+
+
+
+
+
+	
+##########################################
+#run gibbs sampler in C
+#arguments 
+	#dat: logged data matrix N_days X N_cons
+	#mdls: logged data matrix N_days by N_cons of mdls
+	#outfilename: name of output file
+	#niter: number of iterations for MCMC
+	#burnin: number of burnin samples
+	#ndraws: number of draws from the censored data to output
+	#seed: random seed
+##########################################
+
+runGIBBSc <- function(dat, mdls, outfilename, niter = 100, 
+	burnin = 50, ndraws = 1, seed) {
+		
+	comm <- paste("./gibbs -n", niter, "-b", burnin,
+		"-d", ndraws, "-r", seed, dat, mdls, outfilename)
+		
+	system(comm)	 
+	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ##########################################
 #Internal functions
 ##########################################
@@ -423,22 +475,6 @@ sigfun <- function(dat, guessvec, prv="no prior", prS="no prior") {
 
 	guessvec
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
