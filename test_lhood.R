@@ -23,6 +23,12 @@ guess[[3]] <- cov(dat)
 test <- lhood(dat, mdls, guess, burnin = 1, N = 10)
 
 
+#####
+# or run in C (creates .nc file with output)
+runGIBBSc(dat = "test_data.csv", mdls = "test_mdls.csv", 
+	outfile = "testdat.nc", seed = 10)
+
+
 
 #analyze output
 #find posterior means of theta
