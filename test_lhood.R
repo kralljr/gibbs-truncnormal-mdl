@@ -25,7 +25,7 @@ test <- lhood(dat, mdls, guess, burnin = 1, N = 10)
 
 #####
 # or run in C (creates .nc file with output)
-runGIBBSc(dat = "test_data.csv", mdls = "test_mdls.csv", 
+lhoodC(dat = "test_data.csv", mdls = "test_mdls.csv", 
 	outfile = "testdat.nc", seed = 10)
 
 
