@@ -129,7 +129,7 @@ lhood <- function(dat, mdls,
 	#seed: random seed
 ##########################################
 
-runGIBBSc <- function(dat, mdls, outfilename, niter = 100, 
+lhoodC <- function(dat, mdls, outfilename, niter = 100, 
 	burnin = 50, ndraws = 1, seed) {
 		
 	comm <- paste("./gibbs -n", niter, "-b", burnin,
