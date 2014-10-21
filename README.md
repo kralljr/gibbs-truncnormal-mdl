@@ -28,6 +28,10 @@ The executable takes the optional flags:
     -r int   random seed (default 0)
     -h       show this help
 
+## Data
+
+The input data (PM concentations) and minimum detection limits (MDLs) are CSV files. Each column of the data (or MDLs) represents a particulate and each row contains the concentration (or MDL) for that particulate on a given day. Column labels may be provided, but row labels must be absent.
+
 ## Operating system specific installation notes
 
 ### OS X
@@ -99,3 +103,7 @@ By default, the package is installed in `/usr/local`. To change this location to
 then build and install as before.
 
     make check install
+
+## Copying
+
+The standalone Gibbs sampler is copyright 2012-2014 and licensed under the GPLv3.
