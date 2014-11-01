@@ -1,7 +1,10 @@
 *.o
 *.swp
+*.rpm
+*.tar.gz
 .gdbinit
 gmon.out
+tags
 gibbs
 rmvnorm
 rtnorm

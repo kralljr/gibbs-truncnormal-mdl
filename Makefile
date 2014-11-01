@@ -4,10 +4,16 @@ NC_LDFLAGS=$(shell pkg-config --libs netcdf)
 GSL_CFLAGS=$(shell pkg-config --cflags gsl)
 GSL_LDFLAGS=$(shell pkg-config --libs gsl)
 CFLAGS=$(NC_CFLAGS) $(GSL_CFLAGS) -Wall -Wextra -O3 -DHAVE_INLINE
-LDFLAGS=$(NC_LDFLAGS) -lgsl -lm
+LDFLAGS=$(NC_LDFLAGS) $(GSL_LDFLAGS) -lm
+
+# If using atlas, uncomment the following line to enable
+#LDFLAGS=$(NC_LDFLAGS) -lgsl -L/usr/lib64/atlas -lcblas -latlas -lm
 
 # On OS X, uncomment the following line to enable the Accelerate framework
 #LDFLAGS=$(NC_LDFLAGS) -lgsl -framework Accelerate -lm
+
+# Version
+VERSION = 1.0
 
 
 all: gibbs rwishart rmvnorm rtnorm
@@ -48,5 +54,14 @@ truncnormal.o: truncnormal.c truncnormal.h
 wishart.o: wishart.c wishart.h
 	$(CC) $(CFLAGS) -c $<
 
+
+# Phony targets
+
+dist:
+	mkdir gibbs-truncnormal-mdl-$(VERSION)
+	cp *.c *.h Makefile README.md gibbs-truncnormal-mdl-$(VERSION)
+	tar czf gibbs-truncnormal-mdl-$(VERSION).tar.gz gibbs-truncnormal-mdl-$(VERSION)
+
 clean:
-	-rm -f *.o gibbs
+	-rm -rf gibbs-truncnormal-mdl-$(VERSION)
+	-rm -f *.o gibbs rwishart rmvnorm rtnorm
