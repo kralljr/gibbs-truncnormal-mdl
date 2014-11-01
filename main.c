@@ -124,8 +124,13 @@ ncdf_write_file(const char *filename, const struct gibbs_problem *p)
     int mthet_var_id;
     int msig_var_id;
     size_t i;
+    int err;
 
-    nc_create(filename, NC_CLOBBER | NC_NETCDF4 | NC_CLASSIC_MODEL, &ncid);
+    err = nc_create(filename, NC_CLOBBER | NC_CLASSIC_MODEL, &ncid);
+    if (err != NC_NOERR) {
+        fprintf(stderr, "%s\n", nc_strerror(err));
+        return;
+    }
 
     nc_def_dim(ncid, "time", p->data->size1, &time_dim_id);
     nc_def_dim(ncid, "constituents", p->data->size2, &cons_dim_id);
@@ -145,7 +150,6 @@ ncdf_write_file(const char *filename, const struct gibbs_problem *p)
     dim_ids[1] = time_dim_id;
     dim_ids[0] = draw_dim_id;
     nc_def_var(ncid, "data", NC_DOUBLE, 3, dim_ids, &data_var_id);
-    nc_def_var_deflate(ncid, data_var_id, 1, 1, 5);
 
     nc_enddef(ncid);
 
