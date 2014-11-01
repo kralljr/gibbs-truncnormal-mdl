@@ -58,6 +58,7 @@ wishart.o: wishart.c wishart.h
 # Phony targets
 
 dist:
+	-rm -rf gibbs-truncnormal-mdl-$(VERSION)
 	mkdir gibbs-truncnormal-mdl-$(VERSION)
 	cp *.c *.h Makefile README.md gibbs-truncnormal-mdl-$(VERSION)
 	tar czf gibbs-truncnormal-mdl-$(VERSION).tar.gz gibbs-truncnormal-mdl-$(VERSION)

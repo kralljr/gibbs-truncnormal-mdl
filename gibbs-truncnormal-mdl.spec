@@ -14,8 +14,6 @@ BuildRequires:	atlas-devel
 BuildRequires:	gcc
 BuildRequires:	make
 BuildRequires:	pkgconfig
-Requires:	    gsl >= 1.13
-Requires:	    netcdf >= 4.1.0
 
 %description
 Multiply impute censored PM2.5 constituent concentrations concentrations using a likelihood-based method.
