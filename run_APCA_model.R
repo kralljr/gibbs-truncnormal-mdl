@@ -89,7 +89,7 @@ means <- class
 sds <- class
 for(i in 1 : ndraws) {
     #run APCA
-    apca1 <- SIMapca(data = data, tots = tots, nsources = nsources,
+    apca1 <- SIMapca(data = data[,, i], tots = tots, nsources = nsources,
                      adjust = NULL, k = k)
 
     #get classification
