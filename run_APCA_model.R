@@ -1,48 +1,47 @@
 # For each simulated dataset, each censoring adjustment method, run APCA
 
-
-
-#print and save arguments passed from BASH
-# list of length 6
-# args[[1]] is source abbreviation
-# args[[2]] is simulation iteration 1-300
-# args[[3]] is number of constituents censored
-# args[[4]] is percent censored
-# args[[5]] is filepath to data
-# args[[6]] is model iteration 1-100
-print(commandArgs(TRUE))
-args <- commandArgs(TRUE)
-
-#args should include file name of data
-
 #load library
 library(handles)
 
 
-#source combo e.g. woodiedus
-sabb <- args[[1]]
-#number of sources
-if(sabb == "wdd" | sabb == "dvd") {
-	source <- ifelse(sabb == "wdd", 
-		"woodiedus", "dusvehdie")
+
+#print and save arguments passed from BASH/python?
+print(commandArgs(TRUE))
+args <- commandArgs(TRUE)
+
+# THIS IS WHAT I NEED TO PASS (with file paths) TO THIS FILE
+# modelfile <- "models_woodiedus_1_n2_p10.nc"
+# datafile <- "woodiedus_1.csv"
+# savefile <- "APCA_woodiedus_model_1_n2_p10.RData"
+
+
+
+
+filen <- strsplit(modelfile, "_")[[1]]
+
+#simulation iteration 1-300
+iter <- as.numeric(filen[[3]])
+#source combo: woodiedus, dusvehdie, woodiedusvehcoa
+source <- filen[[2]]
+#number of censored constituents
+ncons <- filen[[4]]
+ncons <- as.numeric(substr(filen[[4]], 2, nchar(filen[[4]])))
+#percent censored
+censor <- as.numeric(substr(filen[[5]], 2, 3))
+
+
+
+
+#assign source details
+if(source == "woodiedus" | source == "dusvehdie") {
 	nsources <- 3
 	k <- 1
-	type1 <- ifelse(sabb == "wdd", 1, 2)
+	type1 <- ifelse(source == "woodiedus", 1, 2)
 }else{
 	nsources <- 5	
 	k <- 20
 	type1 <- 3
-	source <- "woodiedusvehcoa"
 }
-#simulation number e.g. 124
-iter <- args[[2]]
-#how many constituents censored e.g. 2
-ncons <- args[[3]]
-#what percent censored e.g. 50
-censor <- args[[4]]
-#adjust: NULL 
-fp <- args[[5]]
-modelsim <- as.numeric(args[[6]])
 
 
 
@@ -51,43 +50,44 @@ modelsim <- as.numeric(args[[6]])
 
 #read in data
 # NEEDS TO BE MODIFIED FOR MODEL DATA
-filename <- paste0(source, "_", iter, ".csv")
-fp <- file.path(fp, source)
-data <- read.csv(file.path(fp, filename))
-
-
+ncdat <- nc_open(modelfile)
+data <- ncvar_get(ncdat, "data")
+data <- aperm(data, c(2, 1, 3))
+nc_close(ncdat)
 
 
 #set seed
 set.seed(15)
-seeds <- sample(seq(1, 1000000), 300 * 3 * 100 * 5)
-seedmat <- array(seeds, dim = c(300, 3, 100, 5))
+seeds <- sample(seq(1, 1000000), 300 * 3 * 5)
+seedmat <- array(seeds, dim = c(300, 3, 5))
 ncons1 <- c(2, 11)
 censor1 <- c(20, 50, 80)
 numper <- paste0(rep(ncons1, each = 3), rep(censor1, 2))[-6]
 whcen <- which(numper == paste0(ncons, censor))
-seed1 <- seedmat[as.numeric(iter), type1, modelsim, whcen]
+seed1 <- seedmat[as.numeric(iter), type1, whcen]
 
 
 
-#run APCA
+#get totals
+consdat <- read.csv(datafile) 
+tots <- rowSums(consdat)
+
+
+#run APCA for each of 100 files
 set.seed(seed1)
-tots <- rowSums(data)
-apca.res <- SIMapca(data = data, tots = tots, 
-	nsources = nsources, 
-	adjust = NULL, k = k)
+
+apca.res <- list()
+for(i in 1 : 100) {
+	apca.res[[i]] <- SIMapca(data = data, tots = tots, 
+		nsources = nsources, 
+		adjust = NULL, k = k)
+}
 
 
-#save output
-name1 <- paste0("APCA_", source, "_model_", iter,  
-	"_n", ncons, "_p", censor)
-name1 <- paste0(name1, ".RData")
+
+
 
 
 
 #get output format
-fp1 <- file.path(getwd(), "rdata")
-fp1 <- file.path(fp1, name1)
-print(fp1)
-
-save(apca.res, file = fp1)
+save(apca.res, file = savefile)
