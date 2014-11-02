@@ -83,37 +83,37 @@ tots <- rowSums(consdat)
 #run APCA for each of 100 files
 set.seed(seed1)
 
-apca.res <- array(dim = c(nrow(data), nsources, 100))
 l1 <- vector()
 class <- matrix(nrow = 100, ncol = nsources)
+means <- class
+sds <- class
 for(i in 1 : 100) {
+	
+	#run APCA
 	apca1 <- SIMapca(data = data, tots = tots, 
 		nsources = nsources, 
-		adjust = NULL, k = k, complete = T)
+		adjust = NULL, k = k)
 		
+	#get classification	
 	class1 <- apca1$class
 	l1[i] <- length(which(class1 %in% sourceall))
+	#match classification to truth
 	match1 <- match(sourceall, class1)
-    conc <- apca1$apca$conc
-	conc <- conc[, match1]
-        
+	
+	#reorder and save results 
+	means[i, ] <-apca1$means[match1]
+	sds[i, ] <- apca1$sd[match1]
 	class[i, ] <- apca1$class	
 		
-		
-	apca.res[,, i] <- conc
 }
 
 
 #combine output
-apca.res <- apply(apca.res, c(1, 2), mean, 
-	na.rm = T, trim = 0.2)
 l1 <- mean(l1, na.rm = T, trim = 0.2)	
 	
-means <- apply(apca.res, 2, mean, na.rm = T)
-sd <- apply(apca.res, 2, sd, na.rm = T)
 
-
-apca.res <- list(means = means, sd = sd, class = class)
+apca.res <- list(means = means, sd = sd, 
+	class = class, l1 = l1)
 
 
 
