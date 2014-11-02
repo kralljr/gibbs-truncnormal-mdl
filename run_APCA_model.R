@@ -10,19 +10,19 @@ print(commandArgs(TRUE))
 args <- commandArgs(TRUE)
 
 # THIS IS WHAT I NEED TO PASS (with file paths) TO THIS FILE
-# modelfile <- "models_woodiedus_1_n2_p10.nc"
 # datafile <- "woodiedus_1.csv"
+# modelfile <- "models_woodiedus_1_n2_p10.nc"
 # savefile <- "APCA_woodiedus_model_1_n2_p10.RData"
-
-
-
+datafile <- args[[1]]
+modelfile <- args[[2]]
+savefile <- args[[3]]
 
 filen <- strsplit(modelfile, "_")[[1]]
 
 #simulation iteration 1-300
 iter <- as.numeric(filen[[3]])
 #source combo: woodiedus, dusvehdie, woodiedusvehcoa
-source <- filen[[2]]
+source_combination <- filen[[2]]
 #number of censored constituents
 ncons <- filen[[4]]
 ncons <- as.numeric(substr(filen[[4]], 2, nchar(filen[[4]])))
@@ -34,21 +34,21 @@ censor <- as.numeric(substr(censor, 2, 3))
 
 
 #assign source details
-if(source == "woodiedus" | source == "dusvehdie") {
-	nsources <- 3
-	k <- 1
-	type1 <- ifelse(source == "woodiedus", 1, 2)
-	if(source == "woodiedus") {
-		sourceall <- c("wood", "diesel", "dust")
-	}else{
-		sourceall <- c("dust", "vehicle", "diesel")
-		}
-}else{
-	nsources <- 5	
-	k <- 20
-	type1 <- 3
-	sourceall <- c("wood", "diesel", "dust", "vehicle", "coal")
+if (source_combination == "woodiedus" | source_combination == "dusvehdie") {
+    k <- 1
+    type1 <- ifelse(source_combination == "woodiedus", 1, 2)
+    if (source_combination == "woodiedus") {
+        sourceall <- c("wood", "diesel", "dust")
+    } else {
+        sourceall <- c("dust", "vehicle", "diesel")
+    }
+} else {
+    k <- 20
+    type1 <- 3
+    sourceall <- c("wood", "diesel", "dust", "vehicle", "coal")
 }
+
+nsources <- length(sourceall)
 
 
 
@@ -76,44 +76,39 @@ seed1 <- seedmat[as.numeric(iter), type1, whcen]
 
 
 #get totals
-consdat <- read.csv(datafile) 
+consdat <- read.csv(datafile)
 tots <- rowSums(consdat)
 
 
-#run APCA for each of 100 files
+#run APCA for each of draw
 set.seed(seed1)
 
-l1 <- vector()
-class <- matrix(nrow = 100, ncol = nsources)
+ndraws <- dim(data)[3]
+l1 <- vector(length=ndraws)
+class <- matrix(nrow = ndraws, ncol = nsources)
 means <- class
 sds <- class
-for(i in 1 : 100) {
-	
-	#run APCA
-	apca1 <- SIMapca(data = data, tots = tots, 
-		nsources = nsources, 
-		adjust = NULL, k = k)
-		
-	#get classification	
-	class1 <- apca1$class
-	l1[i] <- length(which(class1 %in% sourceall))
-	#match classification to truth
-	match1 <- match(sourceall, class1)
-	
-	#reorder and save results 
-	means[i, ] <-apca1$means[match1]
-	sds[i, ] <- apca1$sd[match1]
-	class[i, ] <- apca1$class	
-		
+for(i in 1 : ndraws) {
+    #run APCA
+    apca1 <- SIMapca(data = data, tots = tots, nsources = nsources,
+                     adjust = NULL, k = k)
+
+    #get classification
+    class1 <- apca1$class
+    l1[i] <- length(which(class1 %in% sourceall))
+    #match classification to truth
+    match1 <- match(sourceall, class1)
+
+    #reorder and save results
+    means[i, ] <-apca1$means[match1]
+    sds[i, ] <- apca1$sd[match1]
+    class[i, ] <- apca1$class
 }
 
 
 #combine output
-l1 <- mean(l1, na.rm = T, trim = 0.2)	
-	
-
-apca.res <- list(means = means, sd = sd, 
-	class = class, l1 = l1)
+l1 <- mean(l1, na.rm = T, trim = 0.2)
+apca.res <- list(means = means, sd = sd, class = class, l1 = l1)
 
 
 
