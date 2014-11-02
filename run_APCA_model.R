@@ -2,7 +2,7 @@
 
 #load library
 library(handles)
-
+library(ncdf4)
 
 
 #print and save arguments passed from BASH/python?
@@ -27,7 +27,8 @@ source <- filen[[2]]
 ncons <- filen[[4]]
 ncons <- as.numeric(substr(filen[[4]], 2, nchar(filen[[4]])))
 #percent censored
-censor <- as.numeric(substr(filen[[5]], 2, 3))
+censor <- strsplit(filen[[5]], "\\.")[[1]][1]
+censor <- as.numeric(substr(censor, 2, 3))
 
 
 
@@ -37,10 +38,16 @@ if(source == "woodiedus" | source == "dusvehdie") {
 	nsources <- 3
 	k <- 1
 	type1 <- ifelse(source == "woodiedus", 1, 2)
+	if(source == "woodiedus") {
+		sourceall <- c("wood", "diesel", "dust")
+	}else{
+		sourceall <- c("dust", "vehicle", "diesel")
+		}
 }else{
 	nsources <- 5	
 	k <- 20
 	type1 <- 3
+	sourceall <- c("wood", "diesel", "dust", "vehicle", "coal")
 }
 
 
@@ -76,16 +83,37 @@ tots <- rowSums(consdat)
 #run APCA for each of 100 files
 set.seed(seed1)
 
-apca.res <- list()
+apca.res <- array(dim = c(nrow(data), nsources, 100))
+l1 <- vector()
+class <- matrix(nrow = 100, ncol = nsources)
 for(i in 1 : 100) {
-	apca.res[[i]] <- SIMapca(data = data, tots = tots, 
+	apca1 <- SIMapca(data = data, tots = tots, 
 		nsources = nsources, 
-		adjust = NULL, k = k)
+		adjust = NULL, k = k, complete = T)
+		
+	class1 <- apca1$class
+	l1[i] <- length(which(class1 %in% sourceall))
+	match1 <- match(sourceall, class1)
+    conc <- apca1$apca$conc
+	conc <- conc[, match1]
+        
+	class[i, ] <- apca1$class	
+		
+		
+	apca.res[,, i] <- conc
 }
 
 
+#combine output
+apca.res <- apply(apca.res, c(1, 2), mean, 
+	na.rm = T, trim = 0.2)
+l1 <- mean(l1, na.rm = T, trim = 0.2)	
+	
+means <- apply(apca.res, 2, mean, na.rm = T)
+sd <- apply(apca.res, 2, sd, na.rm = T)
 
 
+apca.res <- list(means = means, sd = sd, class = class)
 
 
 
