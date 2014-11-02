@@ -2,7 +2,7 @@
 
 #load library
 library(handles)
-library(ncdf4)
+library(ncdf)
 
 
 #print and save arguments passed from BASH/python?
@@ -57,10 +57,9 @@ nsources <- length(sourceall)
 
 #read in data
 # NEEDS TO BE MODIFIED FOR MODEL DATA
-ncdat <- nc_open(modelfile)
-data <- ncvar_get(ncdat, "data")
-data <- aperm(data, c(2, 1, 3))
-nc_close(ncdat)
+ncdat <- open.ncdf(modelfile)
+data <- aperm(get.var.ncdf(ncdat, "data"), c(2, 1, 3))
+close.ncdf(ncdat)
 
 
 #set seed
