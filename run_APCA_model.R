@@ -107,7 +107,7 @@ for(i in 1 : ndraws) {
 
 #combine output
 l1 <- mean(l1, na.rm = T, trim = 0.2)
-apca.res <- list(means = means, sd = sd, class = class, l1 = l1)
+apca.res <- list(means = means, sds = sds, class = class, l1 = l1)
 
 
 
